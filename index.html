@@ -124,6 +124,7 @@ th{color:var(--mute);font-weight:600;background:var(--panel)}
 .s-chua_kham{background:#ff8fa3;color:#3a0610}
 .s-da_kham{background:#7dffb3;color:#04301a}
 button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
+#net{font-size:12px;margin-top:3px}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -134,7 +135,7 @@ button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
 </head>
 <body>
 <main id="main">
-  <header><h1 class="brand">TRẠM Y TẾ CÁT LÁI</h1><div id="who"></div></header>
+  <header><h1 class="brand">TRẠM Y TẾ CÁT LÁI</h1><div id="who"></div><div id="net"></div></header>
   <div class="banner" id="banner" hidden>Chế độ thử: chưa cấu hình Firebase nên dữ liệu chỉ lưu trên máy này (điền config.js để đồng bộ realtime).</div>
   <div id="app"></div>
 </main>
@@ -155,12 +156,22 @@ const ls = { get: k => { try { return localStorage.getItem(k); } catch (e) { ret
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 1600); }
 
 /* ---------- Dữ liệu: Firebase Realtime Database (hoặc lưu tạm trên máy nếu chưa cấu hình) ---------- */
+function setNet(k, m) {
+  const t = { ok: ['#3ddc97', 'Realtime đã kết nối'], off: ['#ffb84d', 'Mất kết nối — đang thử lại'],
+              err: ['#ff6b6b', 'Lỗi: ' + m], local: ['#ffb84d', 'Chế độ thử — chưa đồng bộ giữa các máy'] }[k];
+  const e = $('#net'); e.style.color = t[0]; e.textContent = '● ' + t[1];
+}
 const DB = (() => {
-  const c = window.FIREBASE_CONFIG;
-  if (window.firebase && c && c.databaseURL) {
-    firebase.initializeApp(c); const db = firebase.database();
+  const c = window.FIREBASE_CONFIG || {};
+  const filled = Object.keys(c).some(k => c[k]);
+  let db = null, why = '';
+  if (filled && !c.databaseURL) why = 'Thiếu databaseURL trong config.js';
+  else if (filled && !window.firebase) why = 'Không tải được thư viện Firebase (kiểm tra mạng)';
+  else if (c.databaseURL) { try { firebase.initializeApp(c); db = firebase.database(); } catch (e) { why = 'Cấu hình Firebase sai: ' + e.message; } }
+  if (db) {
+    db.ref('.info/connected').on('value', s => setNet(s.val() ? 'ok' : 'off'));
     return { mode: 'cloud',
-      listen: (d, cb) => { const r = db.ref('requests/' + d); const f = r.on('value', s => cb(s.val() || {})); return () => r.off('value', f); },
+      listen: (d, cb) => { const r = db.ref('requests/' + d); const f = r.on('value', s => cb(s.val() || {}), e => setNet('err', e.code || e.message)); return () => r.off('value', f); },
       add: (d, o) => db.ref('requests/' + d).push(o),
       set: (d, id, s) => db.ref('requests/' + d + '/' + id).update({ status: s, updated: Date.now() }),
       all: () => db.ref('requests').once('value').then(s => s.val() || {}) };
@@ -169,13 +180,13 @@ const DB = (() => {
   const rd = d => { try { return JSON.parse(ls.get('req:' + d)) || {}; } catch (e) { return {}; } };
   const wr = (d, m) => { ls.set('req:' + d, JSON.stringify(m)); subs.forEach(f => f()); };
   addEventListener('storage', () => subs.forEach(f => f()));
-  return { mode: 'local',
+  return { mode: 'local', why,
     listen: (d, cb) => { const f = () => cb(rd(d)); subs.add(f); f(); return () => subs.delete(f); },
     add: (d, o) => { const m = rd(d); m['l' + Date.now()] = o; wr(d, m); return Promise.resolve(); },
     set: (d, id, s) => { const m = rd(d); if (m[id]) { m[id].status = s; wr(d, m); } return Promise.resolve(); },
     all: () => { const o = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.indexOf('req:') === 0) o[k.slice(4)] = JSON.parse(localStorage.getItem(k)); } } catch (e) {} return Promise.resolve(o); } };
 })();
-if (DB.mode === 'local') $('#banner').hidden = false;
+if (DB.mode === 'local') { $('#banner').hidden = false; if (DB.why) $('#banner').textContent = DB.why; setNet(DB.why ? 'err' : 'local', DB.why); }
 
 /* ---------- Ô chọn tên (gõ để tìm, chỉ chọn được tên có sẵn) ---------- */
 function picker(box, onChange) {
@@ -226,7 +237,7 @@ function wire(filter, edit) {
     });
   };
   dt.onchange = () => { if (dt.value) go(); };
-  box.onclick = e => { const b = e.target.closest('button[data-id]'); if (b) DB.set(dt.value, b.dataset.id, b.dataset.s); };
+  box.onclick = e => { const b = e.target.closest('button[data-id]'); if (b) DB.set(dt.value, b.dataset.id, b.dataset.s).catch(e => toast('Lỗi: ' + (e.code || e.message))); };
   $('#c1').onclick = () => download(rows, dt.value);
   $('#c2').onclick = () => DB.all().then(all => {
     const out = []; for (const d in all) for (const id in all[d]) { const r = Object.assign({}, all[d][id], { id, date: d }); if (filter(r)) out.push(r); }
@@ -266,7 +277,7 @@ function viewSend() {
   $('#redo').onclick = () => { cur = null; scan.reset(); upd(); };
   $('#send').onclick = () => {
     if (!cur || !handler) return;
-    DB.add(today(), { cccd: cur.id, name: cur.name, dob: cur.dob, sender: me, handler, status: 'chua_kiem_tra', ts: Date.now() }).catch(() => toast('Gửi lỗi, vui lòng thử lại'));
+    DB.add(today(), { cccd: cur.id, name: cur.name, dob: cur.dob, sender: me, handler, status: 'chua_kiem_tra', ts: Date.now() }).catch(e => toast('Gửi lỗi: ' + (e.code || e.message)));
     toast('Đã gửi cho ' + handler); cur = null; scan.reset(); upd();
   };
   wire(r => r.sender === me, false);
