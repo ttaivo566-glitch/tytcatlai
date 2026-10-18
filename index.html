@@ -129,9 +129,14 @@ button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="config.js?v=2"></script>
-<script src="scanner.js?v=2"></script>
+<script>
+(function () {
+  var ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (ios) document.write('<script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"><\/script>');
+  document.write('<script src="' + (ios ? 'scanner-ios.js' : 'scanner-android.js') + '?v=3"><\/script>');
+})();
+</script>
 </head>
 <body>
 <main id="main">
@@ -189,18 +194,19 @@ const DB = (() => {
 if (DB.mode === 'local') { $('#banner').hidden = false; if (DB.why) $('#banner').textContent = DB.why; setNet(DB.why ? 'err' : 'local', DB.why); }
 
 /* ---------- Ô chọn tên (gõ để tìm, chỉ chọn được tên có sẵn) ---------- */
-function picker(box, onChange) {
+function picker(box, onChange, init) {
   box.innerHTML = '<input type="text" placeholder="Gõ để tìm tên…" autocomplete="off" autocapitalize="off" spellcheck="false"><ul></ul>';
   const inp = box.firstChild, ul = box.lastChild;
-  const show = () => {
-    const q = norm(inp.value.trim());
+  const show = all => {
+    const q = all ? '' : norm(inp.value.trim());
     const m = NAMES.filter(n => norm(n).includes(q));
     ul.innerHTML = m.map(n => '<li>' + esc(n) + '</li>').join('') || '<li class="none">Không có tên này trong danh sách</li>';
     ul.style.display = 'block';
   };
   inp.oninput = () => { const ex = NAMES.find(n => n === inp.value.trim()); onChange(ex || null); show(); };
-  inp.onfocus = show;
+  inp.onfocus = () => { inp.select(); show(true); };
   inp.onblur = () => setTimeout(() => ul.style.display = 'none', 150);
+  if (init && NAMES.includes(init)) { inp.value = init; onChange(init); }
   ul.addEventListener('pointerdown', e => {
     const li = e.target.closest('li'); if (!li || li.className === 'none') return;
     e.preventDefault(); inp.value = li.textContent; ul.style.display = 'none'; inp.blur(); onChange(inp.value);
@@ -272,12 +278,12 @@ function viewSend() {
     '<div class="acts"><button class="act" id="send" disabled><span>Gửi</span><span>➤</span></button><button class="act ghost" id="redo"><span>Quét lại</span><span>↻</span></button></div>' +
     '<h3>Bảng trạng thái</h3>' + bar();
   const upd = () => { $('#send').disabled = !(cur && handler); $('#need').textContent = handler ? '' : 'Chọn người xử lí trước khi gửi'; };
-  picker($('#pk'), n => { handler = n; upd(); }); upd();
+  picker($('#pk'), n => { handler = n; upd(); }, ls.get('cl_h:' + me)); upd();
   scan = initScanner(); scan.onResult = d => { cur = d; upd(); };
   $('#redo').onclick = () => { cur = null; scan.reset(); upd(); };
   $('#send').onclick = () => {
     if (!cur || !handler) return;
-    const h = handler, t0 = setTimeout(() => toast('Chưa gửi được lên máy chủ — kiểm tra mạng/cấu hình Firebase', 5000), 5000);
+    const h = handler; ls.set('cl_h:' + me, h); const t0 = setTimeout(() => toast('Chưa gửi được lên máy chủ — kiểm tra mạng/cấu hình Firebase', 5000), 5000);
     DB.add(today(), { cccd: cur.id, name: cur.name, dob: cur.dob, sender: me, handler: h, status: 'chua_kiem_tra', ts: Date.now() })
       .then(() => { clearTimeout(t0); toast(DB.mode === 'local' ? 'Đã lưu trên máy này (chế độ thử — máy khác chưa thấy)' : 'Đã gửi cho ' + h + ' ✓', 3000); })
       .catch(e => { clearTimeout(t0); toast('Gửi lỗi: ' + (e.code || e.message), 4000); });
