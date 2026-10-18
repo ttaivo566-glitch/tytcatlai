@@ -125,6 +125,10 @@ th{color:var(--mute);font-weight:600;background:var(--panel)}
 .s-da_kham{background:#7dffb3;color:#04301a}
 button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
 #net{font-size:12px;margin-top:3px}
+.s-da_huy{background:#2a3436;color:#8fa8a8;text-decoration:line-through}
+.cancel{border:1px solid var(--bad);color:var(--bad);background:transparent;border-radius:999px;padding:5px 10px;font-size:12px;margin-left:6px}
+.in{width:100%;background:transparent;border:0;border-bottom:1px solid var(--line);color:var(--text);font-size:18px;font-weight:600;padding:5px 0;outline:none;margin-top:2px}
+.in:focus{border-color:var(--accent)}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -149,7 +153,8 @@ button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
 <script>
 addEventListener('DOMContentLoaded', () => {
 const NAMES = ["Phạm Thanh Bình","Nguyễn Thị Thùy Trang","Trần Thị Hơn","Vũ Thị Kim Huệ","Võ Phúc Khải","Đào Thị Thu Thảo","Phan Hạnh Thu","Hồ Thị Xuân Mai","Dương Đình Hùng","Nguyễn Thị Tiếp","Nguyễn Thị Ngọc Lan","Trịnh Thị Hằng","Nguyễn Tấn Quý","K' Guis","Trần Thị Lừng","Trần Thị Quế","Nguyễn Thị Huệ","Lê Thị Nguyên Anh","Phạm Hoàng Thu Thảo","Nguyễn Thị Mỹ Kiều","Hoàng Thị Lâm Phương","Nguyễn Thị Tiểu My","Bùi Thị Tuyết Nhung","Hồ Thị Tuyết Vân","Huỳnh Tiến Phước","Huỳnh Lê Thùy Trang","Lưu Công Du","Phan Xuân Quỳnh Như","Võ Trường Giang","Lữ Mộng Hồng Phần","Phạm Thị Kim Chi","Võ Thị Thanh Thảo","Lê Mai Quỳnh Anh","Vũ Thị Sáng","Phan Thanh Trọng Văn","Bùi Thị Huệ","Võ Tiến Tài"];
-const ST = { chua_kiem_tra: 'Chưa kiểm tra', chua_kham: 'Chưa khám', da_kham: 'Đã khám' };
+const ST = { chua_kiem_tra: 'Chưa kiểm tra', chua_kham: 'Chưa khám', da_kham: 'Đã khám', da_huy: 'Đã huỷ' };
+const CH = ['chua_kiem_tra', 'chua_kham', 'da_kham'];
 const $ = s => document.querySelector(s), app = $('#app');
 const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
 const slugOf = n => norm(n).replace(/[^a-z0-9]/g, '');
@@ -214,12 +219,13 @@ function picker(box, onChange, init) {
 }
 
 /* ---------- Bảng & xuất file ---------- */
-function table(rows, edit) {
+function table(rows, mode) {
   if (!rows.length) return '<div class="empty">Chưa có dữ liệu cho ngày này</div>';
   return '<div class="tw"><table><thead><tr><th>Số CCCD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Người gửi yêu cầu</th><th>Người xử lí</th><th>Trạng thái xử lí</th></tr></thead><tbody>' +
     rows.map(r => '<tr><td>' + esc(r.cccd) + '</td><td>' + esc(r.name) + '</td><td>' + esc(r.dob) + '</td><td>' + esc(r.sender) + '</td><td>' + esc(r.handler) + '</td><td>' +
-      (edit ? Object.keys(ST).map(k => '<button class="st ' + (r.status === k ? 's-' + k : 'off') + '" data-id="' + esc(r.id) + '" data-s="' + k + '">' + (r.status === k ? '✓ ' : '') + ST[k] + '</button>').join('')
-            : '<span class="st s-' + esc(r.status) + '">' + (ST[r.status] || '') + '</span>') + '</td></tr>').join('') + '</tbody></table></div>';
+      (mode === 'proc' ? CH.map(k => '<button class="st ' + (r.status === k ? 's-' + k : 'off') + '" data-id="' + esc(r.id) + '" data-s="' + k + '">' + (r.status === k ? '✓ ' : '') + ST[k] + '</button>').join('')
+            : '<span class="st s-' + esc(r.status) + '">' + (ST[r.status] || '') + '</span>' +
+              (r.status === 'chua_kiem_tra' ? '<button class="cancel" data-x="' + esc(r.id) + '">Huỷ</button>' : '')) + '</td></tr>').join('') + '</tbody></table></div>';
 }
 function download(rows, tag) {
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"', t = v => q('="' + v + '"');
@@ -233,17 +239,25 @@ function download(rows, tag) {
 const bar = () => '<div class="bar"><input type="date" id="dt" value="' + today() + '"><button class="mini" id="c1">Tải CSV ngày này</button><button class="mini" id="c2">Tải CSV tất cả</button><span id="cnt"></span></div><div id="tbl"></div>';
 
 let me = null, scan = null, unwatch = null;
-function wire(filter, edit) {
+function wire(filter, mode) {
   const dt = $('#dt'), box = $('#tbl'); let rows = [];
   const go = () => {
     if (unwatch) unwatch();
     unwatch = DB.listen(dt.value, m => {
       rows = Object.keys(m).map(id => Object.assign({}, m[id], { id, date: dt.value })).filter(filter).sort((a, b) => b.ts - a.ts);
-      box.innerHTML = table(rows, edit); const tot = Object.keys(m).length; $('#cnt').textContent = rows.length + ' dòng' + (tot > rows.length ? ' · ' + (tot - rows.length) + ' dòng của người khác trong ngày' : '');
+      box.innerHTML = table(rows, mode); const oth = Object.keys(m).filter(id => !filter(m[id]) && m[id].status !== 'da_huy').length; $('#cnt').textContent = rows.length + ' dòng' + (oth ? ' · ' + oth + ' dòng của người khác trong ngày' : '');
     });
   };
   dt.onchange = () => { if (dt.value) go(); };
-  box.onclick = e => { const b = e.target.closest('button[data-id]'); if (b) DB.set(dt.value, b.dataset.id, b.dataset.s).catch(e => toast('Lỗi: ' + (e.code || e.message))); };
+  box.onclick = e => {
+    const x = e.target.closest('button[data-x]');
+    if (x) {
+      const r = rows.find(r => r.id === x.dataset.x);
+      if (!r || r.status !== 'chua_kiem_tra') return toast('Không huỷ được: người xử lí đã xử lí dòng này', 3000);
+      if (confirm('Huỷ yêu cầu của ' + (r.name || r.cccd) + '?')) DB.set(dt.value, r.id, 'da_huy').catch(e => toast('Lỗi: ' + (e.code || e.message)));
+      return;
+    }
+    const b = e.target.closest('button[data-id]'); if (b) DB.set(dt.value, b.dataset.id, b.dataset.s).catch(e => toast('Lỗi: ' + (e.code || e.message))); };
   $('#c1').onclick = () => download(rows, dt.value);
   $('#c2').onclick = () => DB.all().then(all => {
     const out = []; for (const d in all) for (const id in all[d]) { const r = Object.assign({}, all[d][id], { id, date: d }); if (filter(r)) out.push(r); }
@@ -265,35 +279,44 @@ function viewHome() {
     '<a class="tile" href="#/' + s + '/xuly">📋 Xử lí thông tin<small>Các yêu cầu được giao cho bạn</small></a>';
 }
 function viewSend() {
-  let cur = null, handler = null;
+  let handler = null;
   app.innerHTML = '<a class="back" href="#/' + slugOf(me) + '">‹ Trang chủ</a><h2>Quét CCCD</h2>' +
     '<div class="lab">Người xử lí</div><div class="pk" id="pk"></div>' +
     '<div class="cam" id="cam"><video id="video" playsinline muted autoplay></video><canvas id="work"></canvas><div class="frame"></div>' +
     '<div class="cam-tools"><button id="torch">Đèn</button></div>' +
     '<div class="start" id="start"><div id="startMsg"></div><button id="startBtn">Bật camera</button></div></div>' +
     '<div class="hint" id="hint">Đang khởi động camera…</div>' +
-    '<div class="rows">' + [['v-id', 'Số CCCD'], ['v-name', 'Họ và tên'], ['v-dob', 'Ngày tháng năm sinh']].map(a =>
-      '<div class="row"><div class="txt"><div class="lab">' + a[1] + '</div><div class="val empty" id="' + a[0] + '">—</div></div></div>').join('') + '</div>' +
+    '<div class="rows">' + [['v-id', 'Số CCCD (bắt buộc)', 'numeric', 'Quét hoặc nhập số CCCD'], ['v-name', 'Họ và tên', 'text', 'Không bắt buộc'], ['v-dob', 'Ngày tháng năm sinh', 'numeric', 'dd/mm/yyyy — không bắt buộc']].map(a =>
+      '<div class="row"><div class="txt"><div class="lab">' + a[1] + '</div><input class="in" id="' + a[0] + '" inputmode="' + a[2] + '" placeholder="' + a[3] + '" autocomplete="off"' + (a[0] === 'v-id' ? ' maxlength="12"' : '') + '></div></div>').join('') + '</div>' +
     '<div class="need" id="need"></div>' +
     '<div class="acts"><button class="act" id="send" disabled><span>Gửi</span><span>➤</span></button><button class="act ghost" id="redo"><span>Quét lại</span><span>↻</span></button></div>' +
     '<h3>Bảng trạng thái</h3>' + bar();
-  const upd = () => { $('#send').disabled = !(cur && handler); $('#need').textContent = handler ? '' : 'Chọn người xử lí trước khi gửi'; };
+  const val = id => $('#' + id).value.trim();
+  const upd = () => {
+    const c = val('v-id'), okId = /^\d{9,12}$/.test(c);
+    $('#send').disabled = !(okId && handler);
+    $('#need').textContent = !handler ? 'Chọn người xử lí trước khi gửi' : !c ? 'Quét hoặc nhập số CCCD' : !okId ? 'Số CCCD phải gồm 9–12 chữ số' : '';
+  };
+  $('#v-id').addEventListener('input', e => { const v = e.target.value.replace(/\D/g, ''); if (v !== e.target.value) e.target.value = v; });
+  ['v-id', 'v-name', 'v-dob'].forEach(id => $('#' + id).addEventListener('input', upd));
+  $('#v-dob').addEventListener('blur', e => { const v = e.target.value.trim(); if (/^\d{8}$/.test(v)) e.target.value = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4); });
   picker($('#pk'), n => { handler = n; upd(); }, ls.get('cl_h:' + me)); upd();
-  scan = initScanner(); scan.onResult = d => { cur = d; upd(); };
-  $('#redo').onclick = () => { cur = null; scan.reset(); upd(); };
+  scan = initScanner(); scan.onResult = upd;
+  $('#redo').onclick = () => { scan.reset(); upd(); };
   $('#send').onclick = () => {
-    if (!cur || !handler) return;
+    if ($('#send').disabled) return;
+    const rec = { cccd: val('v-id'), name: val('v-name'), dob: val('v-dob') };
     const h = handler; ls.set('cl_h:' + me, h); const t0 = setTimeout(() => toast('Chưa gửi được lên máy chủ — kiểm tra mạng/cấu hình Firebase', 5000), 5000);
-    DB.add(today(), { cccd: cur.id, name: cur.name, dob: cur.dob, sender: me, handler: h, status: 'chua_kiem_tra', ts: Date.now() })
+    DB.add(today(), Object.assign(rec, { sender: me, handler: h, status: 'chua_kiem_tra', ts: Date.now() }))
       .then(() => { clearTimeout(t0); toast(DB.mode === 'local' ? 'Đã lưu trên máy này (chế độ thử — máy khác chưa thấy)' : 'Đã gửi cho ' + h + ' ✓', 3000); })
       .catch(e => { clearTimeout(t0); toast('Gửi lỗi: ' + (e.code || e.message), 4000); });
-    toast('Đang gửi…'); cur = null; scan.reset(); upd();
+    toast('Đang gửi…'); scan.reset(); upd();
   };
-  wire(r => r.sender === me, false);
+  wire(r => r.sender === me, 'send');
 }
 function viewProc() {
   app.innerHTML = '<a class="back" href="#/' + slugOf(me) + '">‹ Trang chủ</a><h2>Xử lí thông tin</h2>' + bar();
-  wire(r => r.handler === me, true);
+  wire(r => r.handler === me && r.status !== 'da_huy', 'proc');
 }
 
 /* ---------- Điều hướng: #/tenviettlien/quet | /xuly ---------- */
