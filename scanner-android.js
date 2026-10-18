@@ -161,10 +161,9 @@ function initScanner() {
     set('v-id', d.id); set('v-name', d.name); set('v-dob', d.dob);
     setHint('Đã quét xong — kiểm tra rồi bấm Gửi', 'ok');
     api.onResult && api.onResult(d);
-    try { navigator.vibrate && navigator.vibrate(80); } catch (e) {}
     beep();
   }
-  function set(id, v) { const e = $(id); e.textContent = v || '—'; e.classList.toggle('empty', !v); }
+  function set(id, v) { const e = $(id); if (e.tagName === 'INPUT') { e.value = v || ''; e.dispatchEvent(new Event('input')); return; } e.textContent = v || '—'; e.classList.toggle('empty', !v); }
 
   let ac;
   function beep() {
