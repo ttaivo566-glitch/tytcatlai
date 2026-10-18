@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1a1c">
+<title>TRẠM Y TẾ CÁT LÁI</title>
+<style>
+:root{
+  --bg:#0f1a1c; --panel:#172528; --line:#25393d; --text:#e8f1f0; --mute:#8fa8a8;
+  --ok:#3ddc97; --warn:#ffb84d; --bad:#ff6b6b; --accent:#2fc4b2;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{min-height:100vh;min-height:100dvh;display:flex;justify-content:center;
+  padding:env(safe-area-inset-top) 14px calc(env(safe-area-inset-bottom) + 18px)}
+main{width:100%;max-width:460px;padding-top:12px}
+h1{font-size:18px;font-weight:650;margin:2px 2px 10px;letter-spacing:.2px}
+
+/* Camera */
+.cam{position:relative;width:100%;aspect-ratio:1/1;border-radius:18px;overflow:hidden;
+  background:#000;border:2px solid var(--line);transition:border-color .2s}
+.cam video{width:100%;height:100%;object-fit:cover;display:block}
+.cam canvas{display:none}
+.frame{position:absolute;inset:18%;pointer-events:none;border-radius:10px;
+  --c:rgba(255,255,255,.85);
+  background:
+   linear-gradient(var(--c),var(--c)) top left/22px 3px,
+   linear-gradient(var(--c),var(--c)) top left/3px 22px,
+   linear-gradient(var(--c),var(--c)) top right/22px 3px,
+   linear-gradient(var(--c),var(--c)) top right/3px 22px,
+   linear-gradient(var(--c),var(--c)) bottom left/22px 3px,
+   linear-gradient(var(--c),var(--c)) bottom left/3px 22px,
+   linear-gradient(var(--c),var(--c)) bottom right/22px 3px,
+   linear-gradient(var(--c),var(--c)) bottom right/3px 22px;
+  background-repeat:no-repeat}
+.cam.warn{border-color:var(--warn)} .cam.warn .frame{--c:var(--warn)}
+.cam.bad{border-color:var(--bad)}  .cam.bad .frame{--c:var(--bad)}
+.cam.ok{border-color:var(--ok)}    .cam.ok .frame{--c:var(--ok)}
+.cam-tools{position:absolute;right:10px;top:10px;display:flex;gap:8px}
+.cam-tools button{border:0;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;
+  padding:8px 12px;font-size:13px;display:none}
+.cam-tools button.on{background:var(--warn);color:#000}
+.start{position:absolute;inset:0;display:none;flex-direction:column;gap:10px;
+  align-items:center;justify-content:center;text-align:center;padding:24px;
+  background:rgba(15,26,28,.92);font-size:14px;color:var(--mute)}
+.start button{border:0;border-radius:12px;background:var(--accent);color:#04201c;
+  font-weight:700;font-size:16px;padding:12px 22px}
+
+/* Hint */
+.hint{margin:10px 0 14px;padding:11px 14px;border-radius:12px;background:var(--panel);
+  border-left:4px solid var(--mute);font-size:15px;line-height:1.35;min-height:46px}
+.hint.warn{border-color:var(--warn)} .hint.bad{border-color:var(--bad)} .hint.ok{border-color:var(--ok)}
+
+/* Results */
+.rows{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;align-items:center;gap:10px;background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;padding:8px 8px 8px 14px}
+.row .lab{font-size:12px;color:var(--mute)}
+.row .val{font-size:18px;font-weight:600;margin-top:1px;word-break:break-word;min-height:24px}
+.row .val.empty{color:#4d6567;font-weight:400}
+.row .txt{flex:1;min-width:0}
+.copy{flex:none;border:1px solid var(--line);background:#1e3236;color:var(--text);
+  border-radius:10px;padding:10px 14px;font-size:14px;min-width:84px}
+.copy:disabled{opacity:.35}
+.copy.done{background:var(--ok);color:#04201c;border-color:var(--ok)}
+
+/* Actions */
+.acts{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.act{display:flex;align-items:center;justify-content:space-between;text-decoration:none;
+  color:var(--text);background:var(--accent);color:#04201c;font-weight:700;font-size:17px;
+  border:0;border-radius:12px;padding:15px 16px;width:100%;text-align:left}
+.act.sec{background:#e9c46a}
+.act.ghost{background:transparent;color:var(--text);border:1px solid var(--line);font-weight:600}
+.act:active{transform:scale(.99)}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 24px);
+  transform:translateX(-50%) translateY(20px);background:#000c;color:#fff;border-radius:999px;
+  padding:9px 16px;font-size:14px;opacity:0;pointer-events:none;transition:.2s}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.top{display:flex;justify-content:space-between;align-items:center}
+.back{color:var(--mute);font-size:14px;text-decoration:none;padding:6px 2px}
+.res{position:absolute;left:10px;bottom:8px;font-size:11px;color:#fff9;pointer-events:none}
+.zoom{position:absolute;right:10px;bottom:10px;display:flex;gap:6px}
+.zoom button{border:0;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;font-size:14px;padding:7px 12px}
+.zoom button.on{background:var(--accent);color:#04201c}
+.cam video{transform-origin:center}
+header{text-align:center;padding:14px 0 6px}
+.brand{font-size:21px;font-weight:800;letter-spacing:.5px;margin:0;text-transform:uppercase}
+#who{font-size:13px;color:var(--mute);margin-top:4px;min-height:18px}
+#who a{color:var(--accent);margin-left:8px;cursor:pointer}
+main.wide{max-width:1100px}
+.banner{background:#3a2d12;color:#ffd58a;border-radius:10px;padding:8px 12px;font-size:13px;margin:8px 0}
+h2{font-size:18px;margin:8px 2px 12px}
+h3{font-size:16px;margin:20px 2px 8px}
+.hello{margin:10px 2px 14px;font-size:16px}
+.tile{display:block;text-decoration:none;color:var(--text);background:var(--panel);border:1px solid var(--line);
+  border-radius:16px;padding:18px;margin-bottom:12px;font-size:20px;font-weight:650}
+.tile small{display:block;font-weight:400;font-size:13px;color:var(--mute);margin-top:4px}
+.back{display:inline-block;color:var(--mute);text-decoration:none;font-size:14px;padding:4px 2px}
+.lab{font-size:13px;color:var(--mute);margin:4px 2px}
+.pk{position:relative;margin-bottom:12px}
+.pk input{width:100%;font-size:17px;padding:13px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--text)}
+.pk ul{position:absolute;z-index:30;left:0;right:0;top:100%;margin:4px 0 0;padding:0;list-style:none;max-height:40vh;overflow:auto;
+  background:#1c2f33;border:1px solid var(--line);border-radius:12px;display:none}
+.pk li{padding:12px 14px;border-bottom:1px solid var(--line);font-size:16px}
+.pk li.none{color:var(--mute)}
+.modal{position:fixed;inset:0;z-index:20;background:rgba(5,12,13,.88);display:flex;align-items:center;justify-content:center;padding:18px}
+.card{width:100%;max-width:400px;background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:22px}
+.card p{color:var(--mute);margin:0 0 14px;font-size:15px}
+.act:disabled{opacity:.4}
+.need{font-size:13px;color:var(--warn);min-height:18px;margin:6px 2px 0}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.bar input{font-size:15px;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text)}
+.mini{border:1px solid var(--line);background:#1e3236;color:var(--text);border-radius:10px;padding:9px 12px;font-size:13px}
+#cnt{font-size:13px;color:var(--mute)}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:780px;font-size:14px}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mute);font-weight:600;background:var(--panel)}
+.empty{color:var(--mute);font-size:14px;padding:10px 2px}
+.st{display:inline-block;border-radius:999px;padding:6px 11px;font-size:13px;font-weight:650;border:1px solid transparent;margin-right:4px}
+.s-chua_kiem_tra{background:#9aa5a7;color:#0b1214}
+.s-chua_kham{background:#ff8fa3;color:#3a0610}
+.s-da_kham{background:#7dffb3;color:#04301a}
+button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script src="config.js"></script>
+<script src="scanner.js"></script>
+</head>
+<body>
+<main id="main">
+  <header><h1 class="brand">TRẠM Y TẾ CÁT LÁI</h1><div id="who"></div></header>
+  <div class="banner" id="banner" hidden>Chế độ thử: chưa cấu hình Firebase nên dữ liệu chỉ lưu trên máy này (điền config.js để đồng bộ realtime).</div>
+  <div id="app"></div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+addEventListener('DOMContentLoaded', () => {
+const NAMES = ["Phạm Thanh Bình","Nguyễn Thị Thùy Trang","Trần Thị Hơn","Vũ Thị Kim Huệ","Võ Phúc Khải","Đào Thị Thu Thảo","Phan Hạnh Thu","Hồ Thị Xuân Mai","Dương Đình Hùng","Nguyễn Thị Tiếp","Nguyễn Thị Ngọc Lan","Trịnh Thị Hằng","Nguyễn Tấn Quý","K' Guis","Trần Thị Lừng","Trần Thị Quế","Nguyễn Thị Huệ","Lê Thị Nguyên Anh","Phạm Hoàng Thu Thảo","Nguyễn Thị Mỹ Kiều","Hoàng Thị Lâm Phương","Nguyễn Thị Tiểu My","Bùi Thị Tuyết Nhung","Hồ Thị Tuyết Vân","Huỳnh Tiến Phước","Huỳnh Lê Thùy Trang","Lưu Công Du","Phan Xuân Quỳnh Như","Võ Trường Giang","Lữ Mộng Hồng Phần","Phạm Thị Kim Chi","Võ Thị Thanh Thảo","Lê Mai Quỳnh Anh","Vũ Thị Sáng","Phan Thanh Trọng Văn","Bùi Thị Huệ","Võ Tiến Tài"];
+const ST = { chua_kiem_tra: 'Chưa kiểm tra', chua_kham: 'Chưa khám', da_kham: 'Đã khám' };
+const $ = s => document.querySelector(s), app = $('#app');
+const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+const slugOf = n => norm(n).replace(/[^a-z0-9]/g, '');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+const ls = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+             set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
+             del: k => { try { localStorage.removeItem(k); } catch (e) {} } };
+function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 1600); }
+
+/* ---------- Dữ liệu: Firebase Realtime Database (hoặc lưu tạm trên máy nếu chưa cấu hình) ---------- */
+const DB = (() => {
+  const c = window.FIREBASE_CONFIG;
+  if (window.firebase && c && c.databaseURL) {
+    firebase.initializeApp(c); const db = firebase.database();
+    return { mode: 'cloud',
+      listen: (d, cb) => { const r = db.ref('requests/' + d); const f = r.on('value', s => cb(s.val() || {})); return () => r.off('value', f); },
+      add: (d, o) => db.ref('requests/' + d).push(o),
+      set: (d, id, s) => db.ref('requests/' + d + '/' + id).update({ status: s, updated: Date.now() }),
+      all: () => db.ref('requests').once('value').then(s => s.val() || {}) };
+  }
+  const subs = new Set();
+  const rd = d => { try { return JSON.parse(ls.get('req:' + d)) || {}; } catch (e) { return {}; } };
+  const wr = (d, m) => { ls.set('req:' + d, JSON.stringify(m)); subs.forEach(f => f()); };
+  addEventListener('storage', () => subs.forEach(f => f()));
+  return { mode: 'local',
+    listen: (d, cb) => { const f = () => cb(rd(d)); subs.add(f); f(); return () => subs.delete(f); },
+    add: (d, o) => { const m = rd(d); m['l' + Date.now()] = o; wr(d, m); return Promise.resolve(); },
+    set: (d, id, s) => { const m = rd(d); if (m[id]) { m[id].status = s; wr(d, m); } return Promise.resolve(); },
+    all: () => { const o = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.indexOf('req:') === 0) o[k.slice(4)] = JSON.parse(localStorage.getItem(k)); } } catch (e) {} return Promise.resolve(o); } };
+})();
+if (DB.mode === 'local') $('#banner').hidden = false;
+
+/* ---------- Ô chọn tên (gõ để tìm, chỉ chọn được tên có sẵn) ---------- */
+function picker(box, onChange) {
+  box.innerHTML = '<input type="text" placeholder="Gõ để tìm tên…" autocomplete="off" autocapitalize="off" spellcheck="false"><ul></ul>';
+  const inp = box.firstChild, ul = box.lastChild;
+  const show = () => {
+    const q = norm(inp.value.trim());
+    const m = NAMES.filter(n => norm(n).includes(q));
+    ul.innerHTML = m.map(n => '<li>' + esc(n) + '</li>').join('') || '<li class="none">Không có tên này trong danh sách</li>';
+    ul.style.display = 'block';
+  };
+  inp.oninput = () => { const ex = NAMES.find(n => n === inp.value.trim()); onChange(ex || null); show(); };
+  inp.onfocus = show;
+  inp.onblur = () => setTimeout(() => ul.style.display = 'none', 150);
+  ul.addEventListener('pointerdown', e => {
+    const li = e.target.closest('li'); if (!li || li.className === 'none') return;
+    e.preventDefault(); inp.value = li.textContent; ul.style.display = 'none'; inp.blur(); onChange(inp.value);
+  });
+}
+
+/* ---------- Bảng & xuất file ---------- */
+function table(rows, edit) {
+  if (!rows.length) return '<div class="empty">Chưa có dữ liệu cho ngày này</div>';
+  return '<div class="tw"><table><thead><tr><th>Số CCCD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Người gửi yêu cầu</th><th>Người xử lí</th><th>Trạng thái xử lí</th></tr></thead><tbody>' +
+    rows.map(r => '<tr><td>' + esc(r.cccd) + '</td><td>' + esc(r.name) + '</td><td>' + esc(r.dob) + '</td><td>' + esc(r.sender) + '</td><td>' + esc(r.handler) + '</td><td>' +
+      (edit ? Object.keys(ST).map(k => '<button class="st ' + (r.status === k ? 's-' + k : 'off') + '" data-id="' + esc(r.id) + '" data-s="' + k + '">' + (r.status === k ? '✓ ' : '') + ST[k] + '</button>').join('')
+            : '<span class="st s-' + esc(r.status) + '">' + (ST[r.status] || '') + '</span>') + '</td></tr>').join('') + '</tbody></table></div>';
+}
+function download(rows, tag) {
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"', t = v => q('="' + v + '"');
+  const lines = [['Ngày', 'Số CCCD', 'Họ và tên', 'Ngày sinh', 'Người gửi', 'Người xử lí', 'Trạng thái', 'Giờ gửi'].map(q).join(',')]
+    .concat(rows.map(r => [q(r.date), t(r.cccd), q(r.name), t(r.dob), q(r.sender), q(r.handler), q(ST[r.status]), q(new Date(r.ts).toLocaleString('vi-VN'))].join(',')));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'tram-y-te-cat-lai_' + tag + '.csv'; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+const bar = () => '<div class="bar"><input type="date" id="dt" value="' + today() + '"><button class="mini" id="c1">Tải CSV ngày này</button><button class="mini" id="c2">Tải CSV tất cả</button><span id="cnt"></span></div><div id="tbl"></div>';
+
+let me = null, scan = null, unwatch = null;
+function wire(filter, edit) {
+  const dt = $('#dt'), box = $('#tbl'); let rows = [];
+  const go = () => {
+    if (unwatch) unwatch();
+    unwatch = DB.listen(dt.value, m => {
+      rows = Object.keys(m).map(id => Object.assign({}, m[id], { id, date: dt.value })).filter(filter).sort((a, b) => b.ts - a.ts);
+      box.innerHTML = table(rows, edit); $('#cnt').textContent = rows.length + ' dòng';
+    });
+  };
+  dt.onchange = () => { if (dt.value) go(); };
+  box.onclick = e => { const b = e.target.closest('button[data-id]'); if (b) DB.set(dt.value, b.dataset.id, b.dataset.s); };
+  $('#c1').onclick = () => download(rows, dt.value);
+  $('#c2').onclick = () => DB.all().then(all => {
+    const out = []; for (const d in all) for (const id in all[d]) { const r = Object.assign({}, all[d][id], { id, date: d }); if (filter(r)) out.push(r); }
+    download(out.sort((a, b) => a.ts - b.ts), 'tat-ca');
+  });
+  go();
+}
+
+/* ---------- Các màn hình ---------- */
+function login() {
+  app.innerHTML = '<div class="modal"><div class="card"><h2>Xin chào 👋</h2><p>Chọn tên của bạn để tiếp tục</p><div class="pk" id="pk"></div><button class="act" id="ok" disabled><span>Đồng ý</span></button></div></div>';
+  let v = null; picker($('#pk'), n => { v = n; $('#ok').disabled = !n; });
+  $('#ok').onclick = () => { if (!v) return; ls.set('cl_user', v); const h = '#/' + slugOf(v); if (location.hash === h) route(); else location.hash = h; };
+}
+function viewHome() {
+  const s = slugOf(me);
+  app.innerHTML = '<p class="hello">Xin chào, <b>' + esc(me) + '</b></p>' +
+    '<a class="tile" href="#/' + s + '/quet">📷 Quét CCCD<small>Quét và gửi thông tin cho người xử lí</small></a>' +
+    '<a class="tile" href="#/' + s + '/xuly">📋 Xử lí thông tin<small>Các yêu cầu được giao cho bạn</small></a>';
+}
+function viewSend() {
+  let cur = null, handler = null;
+  app.innerHTML = '<a class="back" href="#/' + slugOf(me) + '">‹ Trang chủ</a><h2>Quét CCCD</h2>' +
+    '<div class="lab">Người xử lí</div><div class="pk" id="pk"></div>' +
+    '<div class="cam" id="cam"><video id="video" playsinline muted autoplay></video><canvas id="work"></canvas><div class="frame"></div>' +
+    '<div class="cam-tools"><button id="torch">Đèn</button></div>' +
+    '<div class="start" id="start"><div id="startMsg"></div><button id="startBtn">Bật camera</button></div></div>' +
+    '<div class="hint" id="hint">Đang khởi động camera…</div>' +
+    '<div class="rows">' + [['v-id', 'Số CCCD'], ['v-name', 'Họ và tên'], ['v-dob', 'Ngày tháng năm sinh']].map(a =>
+      '<div class="row"><div class="txt"><div class="lab">' + a[1] + '</div><div class="val empty" id="' + a[0] + '">—</div></div></div>').join('') + '</div>' +
+    '<div class="need" id="need"></div>' +
+    '<div class="acts"><button class="act" id="send" disabled><span>Gửi</span><span>➤</span></button><button class="act ghost" id="redo"><span>Quét lại</span><span>↻</span></button></div>' +
+    '<h3>Bảng trạng thái</h3>' + bar();
+  const upd = () => { $('#send').disabled = !(cur && handler); $('#need').textContent = handler ? '' : 'Chọn người xử lí trước khi gửi'; };
+  picker($('#pk'), n => { handler = n; upd(); }); upd();
+  scan = initScanner(); scan.onResult = d => { cur = d; upd(); };
+  $('#redo').onclick = () => { cur = null; scan.reset(); upd(); };
+  $('#send').onclick = () => {
+    if (!cur || !handler) return;
+    DB.add(today(), { cccd: cur.id, name: cur.name, dob: cur.dob, sender: me, handler, status: 'chua_kiem_tra', ts: Date.now() }).catch(() => toast('Gửi lỗi, vui lòng thử lại'));
+    toast('Đã gửi cho ' + handler); cur = null; scan.reset(); upd();
+  };
+  wire(r => r.sender === me, false);
+}
+function viewProc() {
+  app.innerHTML = '<a class="back" href="#/' + slugOf(me) + '">‹ Trang chủ</a><h2>Xử lí thông tin</h2>' + bar();
+  wire(r => r.handler === me, true);
+}
+
+/* ---------- Điều hướng: #/tenviettlien/quet | /xuly ---------- */
+function route() {
+  if (scan) { scan.stop(); scan = null; }
+  if (unwatch) { unwatch(); unwatch = null; }
+  const p = location.hash.split('/'), name = NAMES.find(n => slugOf(n) === p[1]);
+  me = ls.get('cl_user');
+  const ok = name && me === name;
+  $('#main').className = ok && p[2] === 'xuly' ? 'wide' : '';
+  $('#who').innerHTML = ok ? esc(me) + '<a id="out">Đổi người</a>' : '';
+  if (ok) $('#out').onclick = () => { ls.del('cl_user'); location.hash = '#/'; route(); };
+  if (!ok) return login();
+  p[2] === 'quet' ? viewSend() : p[2] === 'xuly' ? viewProc() : viewHome();
+}
+addEventListener('hashchange', route);
+route();
+});
+</script>
+</body>
+</html>
