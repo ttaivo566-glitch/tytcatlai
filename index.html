@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f1a1c">
+<title>TRẠM Y TẾ CÁT LÁI - QUÉT CCCD & HỆ THỐNG XỬ LÝ</title>
+<!-- Tailwind CSS & jsQR Library -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+
+<style>
+  :root {
+    --bg: #0f1a1c;
+    --panel: #172528;
+    --line: #25393d;
+    --text: #e8f1f0;
+    --mute: #8fa8a8;
+    --accent: #2fc4b2;
+    --status-unchecked: #4a5568;
+    --status-unexamined: #ff7676;
+    --status-examined: #3ddc97;
+  }
+  
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Status Badges */
+  .badge-unchecked {
+    background-color: rgba(143, 168, 168, 0.15);
+    color: #a0aec0;
+    border: 1px solid rgba(160, 174, 192, 0.3);
+  }
+  
+  .badge-unexamined {
+    background-color: rgba(255, 118, 118, 0.18);
+    color: #ff9b9b;
+    border: 1px solid rgba(255, 118, 118, 0.4);
+    box-shadow: 0 0 8px rgba(255, 118, 118, 0.2);
+  }
+
+  .badge-examined {
+    background-color: rgba(61, 220, 151, 0.18);
+    color: #52eea9;
+    border: 1px solid rgba(61, 220, 151, 0.4);
+    box-shadow: 0 0 8px rgba(61, 220, 151, 0.2);
+  }
+
+  /* Camera frame style */
+  .cam-frame {
+    position: absolute;
+    inset: 15%;
+    pointer-events: none;
+    border-radius: 12px;
+    --c: rgba(47, 196, 178, 0.85);
+    background:
+      linear-gradient(var(--c),var(--c)) top left/22px 3px,
+      linear-gradient(var(--c),var(--c)) top left/3px 22px,
+      linear-gradient(var(--c),var(--c)) top right/22px 3px,
+      linear-gradient(var(--c),var(--c)) top right/3px 22px,
+      linear-gradient(var(--c),var(--c)) bottom left/22px 3px,
+      linear-gradient(var(--c),var(--c)) bottom left/3px 22px,
+      linear-gradient(var(--c),var(--c)) bottom right/22px 3px,
+      linear-gradient(var(--c),var(--c)) bottom right/3px 22px;
+    background-repeat: no-repeat;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #172528;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #25393d;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-2 sm:p-4 md:p-6">
+
+  <!-- TOP HEADER -->
+  <header class="w-full max-w-5xl mx-auto mb-4 bg-[#172528] border border-[#25393d] rounded-2xl p-4 flex flex-col md:flex-row justify-between items-center gap-3 shadow-lg">
+    <div class="text-center md:text-left">
+      <h1 class="text-xl sm:text-2xl font-black tracking-wide text-[#2fc4b2] uppercase">
+        TRẠM Y TẾ CÁT LÁI
+      </h1>
+      <p class="text-xs text-[#8fa8a8] mt-0.5" id="domainDisplay">Tên miền: tramytecatlai.vn</p>
+    </div>
+
+    <!-- Active User Status -->
+    <div class="flex items-center gap-3 bg-[#0f1a1c] px-4 py-2 rounded-xl border border-[#25393d]">
+      <div class="w-3 h-3 rounded-full bg-[#3ddc97] animate-pulse"></div>
+      <div>
+        <div class="text-xs text-[#8fa8a8]">Xin chào,</div>
+        <div class="text-sm font-bold text-[#e8f1f0]" id="currentUserName">Chưa đăng nhập</div>
+      </div>
+      <button id="btnSwitchUser" class="ml-2 text-xs text-[#2fc4b2] hover:underline bg-[#172528] px-2 py-1 rounded border border-[#25393d]">
+        Đổi tên
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN APP CONTAINER -->
+  <main class="w-full max-w-5xl mx-auto flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+    <!-- LEFT COLUMN: CAMERA SCANNER & SENDER FORM (5 cols) -->
+    <section class="lg:col-span-5 flex flex-col gap-4">
+      
+      <!-- Camera Card -->
+      <div class="bg-[#172528] border border-[#25393d] rounded-2xl p-4 shadow-lg flex flex-col items-center">
+        <div class="flex justify-between items-center w-full mb-3">
+          <h2 class="font-bold text-sm text-[#e8f1f0] flex items-center gap-2">
+            <svg class="w-4 h-4 text-[#2fc4b2]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h0.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            QUÉT MÃ QR CCCD
+          </h2>
+          <span id="scanHint" class="text-xs px-2 py-1 rounded bg-[#0f1a1c] text-[#8fa8a8]">Sẵn sàng</span>
+        </div>
+
+        <!-- Video Viewport -->
+        <div class="relative w-full aspect-square bg-black rounded-xl overflow-hidden border border-[#25393d] flex items-center justify-center">
+          <video id="webcamVideo" class="w-full h-full object-cover" playsinline muted></video>
+          <canvas id="qrCanvas" class="hidden"></canvas>
+          <div class="cam-frame"></div>
+          
+          <!-- Start Camera Overlay -->
+          <div id="startCamOverlay" class="absolute inset-0 bg-[#0f1a1c]/90 flex flex-col items-center justify-center p-4 text-center gap-3">
+            <p class="text-xs text-[#8fa8a8]">Cho phép máy ảnh để bắt đầu quét mã CCCD</p>
+            <button id="btnStartCam" class="bg-[#2fc4b2] text-[#04201c] font-bold px-4 py-2.5 rounded-xl text-sm hover:opacity-90 transition">
+              Bật Camera Quét
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scanned Info & Send Form -->
+      <div class="bg-[#172528] border border-[#25393d] rounded-2xl p-4 shadow-lg flex flex-col gap-3">
+        <h2 class="font-bold text-sm text-[#e8f1f0] border-b border-[#25393d] pb-2">
+          THÔNG TIN KHÁM BỆNH VỪA QUÉT
+        </h2>
+
+        <!-- Info fields -->
+        <div class="space-y-2 text-sm">
+          <div class="bg-[#0f1a1c] p-2.5 rounded-xl border border-[#25393d]">
+            <span class="text-xs text-[#8fa8a8] block">Số CCCD:</span>
+            <span id="resCCCD" class="font-mono font-bold text-[#2fc4b2] text-base">—</span>
+          </div>
+
+          <div class="bg-[#0f1a1c] p-2.5 rounded-xl border border-[#25393d]">
+            <span class="text-xs text-[#8fa8a8] block">Họ và tên:</span>
+            <span id="resName" class="font-bold text-base">—</span>
+          </div>
+
+          <div class="bg-[#0f1a1c] p-2.5 rounded-xl border border-[#25393d]">
+            <span class="text-xs text-[#8fa8a8] block">Ngày tháng năm sinh:</span>
+            <span id="resDOB" class="font-semibold">—</span>
+          </div>
+        </div>
+
+        <!-- Select Processor -->
+        <div class="mt-1 relative">
+          <label class="text-xs font-semibold text-[#8fa8a8] mb-1 block">NGƯỜI XỬ LÝ (CHỌN TỪ DANH SÁCH):</label>
+          <input type="text" id="inputProcessorSearch" placeholder="Gõ tìm người xử lý..." autocomplete="off"
+            class="w-full bg-[#0f1a1c] border border-[#25393d] focus:border-[#2fc4b2] rounded-xl px-3 py-2 text-sm text-[#e8f1f0] outline-none transition">
+          
+          <div id="processorDropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-[#172528] border border-[#25393d] rounded-xl max-h-48 overflow-y-auto z-30 shadow-2xl">
+            <!-- Dynamically populated -->
+          </div>
+          <input type="hidden" id="selectedProcessorVal">
+        </div>
+
+        <!-- Submit Button -->
+        <button id="btnSendRecord" disabled
+          class="w-full bg-[#2fc4b2] disabled:bg-[#25393d] disabled:text-[#8fa8a8] text-[#04201c] font-black py-3 rounded-xl shadow-lg transition text-sm uppercase tracking-wider mt-1">
+          GỬI YÊU CẦU XỬ LÝ
+        </button>
+      </div>
+
+    </section>
+
+    <!-- RIGHT COLUMN: REALTIME STATUS BOARD & SEARCH (7 cols) -->
+    <section class="lg:col-span-7 flex flex-col gap-4">
+      
+      <div class="bg-[#172528] border border-[#25393d] rounded-2xl p-4 shadow-lg flex-1 flex flex-col">
+        
+        <!-- Header & Date Picker -->
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#25393d] pb-3 mb-3">
+          <div>
+            <h2 class="font-bold text-base text-[#e8f1f0] flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#2fc4b2] animate-ping"></span>
+              BẢNG TRẠNG THÁI XỬ LÝ REALTIME
+            </h2>
+            <p class="text-xs text-[#8fa8a8] mt-0.5">Tự động đồng bộ tức thì giữa các máy</p>
+          </div>
+
+          <!-- Controls: Date & Export -->
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <input type="date" id="filterDate" class="bg-[#0f1a1c] border border-[#25393d] text-xs rounded-xl px-3 py-2 text-[#e8f1f0] outline-none focus:border-[#2fc4b2]">
+            
+            <button id="btnExportData" title="Xuất dữ liệu ngày đã chọn" class="bg-[#0f1a1c] border border-[#25393d] hover:border-[#2fc4b2] text-[#2fc4b2] px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              Tải file
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter View Tab -->
+        <div class="flex gap-2 mb-3 bg-[#0f1a1c] p-1 rounded-xl border border-[#25393d] text-xs">
+          <button id="tabAll" class="flex-1 py-1.5 font-semibold rounded-lg bg-[#2fc4b2] text-[#04201c] transition">Tất cả thông tin</button>
+          <button id="tabMyProcess" class="flex-1 py-1.5 font-semibold rounded-lg text-[#8fa8a8] hover:text-[#e8f1f0] transition">Hồ sơ chờ tôi xử lý</button>
+        </div>
+
+        <!-- Realtime Data Table Container -->
+        <div class="flex-1 overflow-x-auto min-h-[300px]">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr class="border-b border-[#25393d] text-[#8fa8a8] bg-[#0f1a1c]/50">
+                <th class="p-2.5">Số CCCD / Họ Tên</th>
+                <th class="p-2.5">Ngày sinh</th>
+                <th class="p-2.5">Người gửi</th>
+                <th class="p-2.5">Người xử lý</th>
+                <th class="p-2.5 text-center">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody id="tableRecordsBody" class="divide-y divide-[#25393d]/50">
+              <!-- Dynamic Rows -->
+            </tbody>
+          </table>
+
+          <div id="emptyMessage" class="hidden text-center py-12 text-[#8fa8a8] text-xs">
+            Chưa có thông tin quét trong ngày được chọn.
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- MODAL: WELCOME & USER SELECTION -->
+  <div id="loginModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-[#172528] border border-[#25393d] w-full max-w-md rounded-2xl p-6 shadow-2xl flex flex-col gap-4">
+      
+      <div class="text-center">
+        <h2 class="text-xl font-black text-[#2fc4b2] uppercase tracking-wide">TRẠM Y TẾ CÁT LÁI</h2>
+        <p class="text-xs text-[#8fa8a8] mt-1">Xin vui lòng chọn đúng Tên cán bộ/nhân viên để tiếp tục</p>
+      </div>
+
+      <div class="space-y-2 relative">
+        <label class="text-xs font-bold text-[#e8f1f0]">TÌM TÊN CỦA BẠN TRONG DANH SÁCH:</label>
+        <input type="text" id="modalUserSearch" placeholder="Gõ để tìm tên..." autocomplete="off"
+          class="w-full bg-[#0f1a1c] border border-[#25393d] focus:border-[#2fc4b2] rounded-xl px-3.5 py-2.5 text-sm text-[#e8f1f0] outline-none">
+        
+        <div id="modalUserDropdown" class="mt-1 bg-[#0f1a1c] border border-[#25393d] rounded-xl max-h-56 overflow-y-auto divide-y divide-[#25393d]/50">
+          <!-- Dynamically inserted -->
+        </div>
+      </div>
+
+      <div class="bg-[#0f1a1c] p-3 rounded-xl border border-[#25393d]">
+        <span class="text-xs text-[#8fa8a8] block">Tên đã chọn:</span>
+        <span id="modalSelectedNameDisplay" class="font-bold text-sm text-[#3ddc97]">Chưa chọn tên</span>
+      </div>
+
+      <button id="btnConfirmLogin" disabled
+        class="w-full bg-[#2fc4b2] disabled:bg-[#25393d] disabled:text-[#8fa8a8] text-[#04201c] font-bold py-3 rounded-xl shadow-lg transition text-sm uppercase">
+        ĐỒNG Ý VÀ VÀO HỆ THỐNG
+      </button>
+
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toastMsg" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-[#172528] text-[#e8f1f0] border border-[#2fc4b2] text-xs font-medium px-4 py-2.5 rounded-full shadow-2xl opacity-0 pointer-events-none transition-all duration-300 z-50">
+    Thông báo
+  </div>
+
+  <!-- JAVASCRIPT APP LOGIC -->
+  <script>
+    (() => {
+      // 1. DANH SÁCH NHÂN VIÊN CHUẨN XÁC THEO HÌNH ẢNH
+      const STAFF_LIST = [
+        "Phạm Thanh Bình", "Nguyễn Thị Thùy Trang", "Trần Thị Hơn", "Vũ Thị Kim Huệ", "Võ Phúc Khải",
+        "Đào Thị Thu Thảo", "Phan Hạnh Thu", "Hồ Thị Xuân Mai", "Dương Đình Hùng", "Nguyễn Thị Tiếp",
+        "Nguyễn Thị Ngọc Lan", "Trịnh Thị Hằng", "Nguyễn Tấn Quý", "K' Guis", "Trần Thị Lừng",
+        "Trần Thị Quế", "Nguyễn Thị Huệ", "Lê Thị Nguyên Anh", "Pham Hoàng Thu Thảo", "Nguyễn Thị Mỹ Kiều",
+        "Hoàng Thị Lâm Phương", "Nguyễn Thị Tiểu My", "Bùi Thị Tuyết Nhung", "Hồ Thị Tuyết Vân", "Huỳnh Tiến Phước",
+        "Huỳnh Lê Thủy Trang", "Lưu Công Du", "Phan Xuân Quỳnh Như", "Võ Trường Giang", "Lữ Mộng Hồng Phấn",
+        "Phạm Thị Kim Chi", "Võ Thị Thanh Thảo", "Lê Mai Quỳnh Anh", "Vũ Thị Sáng", "Phan Thanh Trọng Văn",
+        "Bùi Thị Huệ", "Võ Tiến Tài"
+      ];
+
+      // STATE MANAGEMENT
+      let currentUser = localStorage.getItem('tyt_current_user') || '';
+      let activeTab = 'all'; // 'all' or 'my'
+      let currentScannedData = null;
+      let broadcastChannel = null;
+
+      // DOM ELEMENTS
+      const $ = id => document.getElementById(id);
+      
+      // Initialize BroadcastChannel for Realtime Syncing across tabs
+      try {
+        broadcastChannel = new BroadcastChannel('tyt_catlai_realtime_channel');
+        broadcastChannel.onmessage = (e) => {
+          if (e.data && e.data.type === 'SYNC_RECORDS') {
+            renderTable();
+          }
+        };
+      } catch (err) {
+        console.log('BroadcastChannel not supported');
+      }
+
+      // Helper: Remove Accents & Format Subdomain Name
+      function removeVietnameseTones(str) {
+        return str.normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+                  .replace(/[^a-zA-Z0-9]/g, '')
+                  .toLowerCase();
+      }
+
+      // Helper: Toast Message
+      function showToast(msg) {
+        const t = $('toastMsg');
+        t.textContent = msg;
+        t.classList.remove('opacity-0', 'pointer-events-none');
+        t.classList.add('opacity-100');
+        setTimeout(() => {
+          t.classList.remove('opacity-100');
+          t.classList.add('opacity-0', 'pointer-events-none');
+        }, 2200);
+      }
+
+      // Helper: Get Today Date YYYY-MM-DD
+      function getTodayStr() {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      }
+
+      // Initial Date Setting
+      $('filterDate').value = getTodayStr();
+
+      /* -------------------------------------------------------------
+         2. USER LOGIN MODAL & DOMAIN SIMULATION
+      ------------------------------------------------------------- */
+      let modalSelectedUser = '';
+
+      function initLoginModal() {
+        if (!currentUser) {
+          $('loginModal').classList.remove('hidden');
+        } else {
+          $('loginModal').classList.add('hidden');
+          updateUserDisplay();
+        }
+        renderModalUserList('');
+      }
+
+      function updateUserDisplay() {
+        $('currentUserName').textContent = currentUser;
+        const slug = removeVietnameseTones(currentUser);
+        $('domainDisplay').textContent = `Tên miền: ${slug}.tramytecatlai.vn`;
+      }
+
+      function renderModalUserList(searchQuery) {
+        const listContainer = $('modalUserDropdown');
+        listContainer.innerHTML = '';
+        const filtered = STAFF_LIST.filter(name => 
+          name.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+
+        if (filtered.length === 0) {
+          listContainer.innerHTML = `<div class="p-3 text-xs text-[#8fa8a8] text-center">Không tìm thấy tên</div>`;
+          return;
+        }
+
+        filtered.forEach(name => {
+          const item = document.createElement('div');
+          item.className = `p-2.5 text-xs font-semibold cursor-pointer hover:bg-[#2fc4b2]/20 hover:text-[#2fc4b2] transition ${modalSelectedUser === name ? 'bg-[#2fc4b2]/20 text-[#2fc4b2]' : 'text-[#e8f1f0]'}`;
+          item.textContent = name;
+          item.onclick = () => {
+            modalSelectedUser = name;
+            $('modalSelectedNameDisplay').textContent = name;
+            $('btnConfirmLogin').disabled = false;
+            renderModalUserList(searchQuery);
+          };
+          listContainer.appendChild(item);
+        });
+      }
+
+      $('modalUserSearch').oninput = (e) => {
+        renderModalUserList(e.target.value);
+      };
+
+      $('btnConfirmLogin').onclick = () => {
+        if (modalSelectedUser) {
+          currentUser = modalSelectedUser;
+          localStorage.setItem('tyt_current_user', currentUser);
+          $('loginModal').classList.add('hidden');
+          updateUserDisplay();
+          renderTable();
+          showToast(`Chào mừng ${currentUser} đăng nhập!`);
+        }
+      };
+
+      $('btnSwitchUser').onclick = () => {
+        modalSelectedUser = currentUser;
+        $('modalSelectedNameDisplay').textContent = currentUser || 'Chưa chọn tên';
+        $('btnConfirmLogin').disabled = !currentUser;
+        $('loginModal').classList.remove('hidden');
+        renderModalUserList('');
+      };
+
+      /* -------------------------------------------------------------
+         3. CAMERA & QR CCCD SCANNING LOGIC
+      ------------------------------------------------------------- */
+      let videoStream = null;
+      let isScanning = false;
+
+      $('btnStartCam').onclick = async () => {
+        $('startCamOverlay').classList.add('hidden');
+        $('scanHint').textContent = 'Đang quét...';
+        try {
+          videoStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+          });
+          const video = $('webcamVideo');
+          video.srcObject = videoStream;
+          video.setAttribute('playsinline', true);
+          await video.play();
+          isScanning = true;
+          requestAnimationFrame(scanQRCodeLoop);
+        } catch (err) {
+          alert('Không thể mở camera. Vui lòng cấp quyền camera trong ứng dụng duyệt web.');
+          $('startCamOverlay').classList.remove('hidden');
+        }
+      };
+
+      function scanQRCodeLoop() {
+        if (!isScanning) return;
+        const video = $('webcamVideo');
+        const canvas = $('qrCanvas');
+        const ctx = canvas.getContext('2d');
+
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          canvas.height = video.videoHeight;
+          canvas.width = video.videoWidth;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+
+          if (code && code.data) {
+            parseCCCDQR(code.data);
+          }
+        }
+        if (isScanning) {
+          requestAnimationFrame(scanQRCodeLoop);
+        }
+      }
+
+      function parseCCCDQR(rawText) {
+        // CCCD format: ID|CMND|Họ Tên|Ngày Sinh|Giới Tính|Địa Chỉ|Ngày Cấp
+        const parts = rawText.split('|').map(s => s.trim());
+        if (parts.length >= 4 && /^\d{9,12}$/.test(parts[0])) {
+          let dob = parts[3];
+          if (/^\d{8}$/.test(dob)) {
+            dob = `${dob.slice(0, 2)}/${dob.slice(2, 4)}/${dob.slice(4)}`;
+          }
+          currentScannedData = {
+            id: parts[0],
+            name: parts[2],
+            dob: dob
+          };
+
+          // Render UI Result
+          $('resCCCD').textContent = currentScannedData.id;
+          $('resName').textContent = currentScannedData.name;
+          $('resDOB').textContent = currentScannedData.dob;
+          
+          checkCanSend();
+          showToast('Quét mã CCCD thành công!');
+          
+          // Sound indicator
+          try {
+            const ac = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ac.createOscillator();
+            osc.frequency.value = 1000;
+            osc.connect(ac.destination);
+            osc.start();
+            osc.stop(ac.currentTime + 0.1);
+          } catch(e) {}
+        }
+      }
+
+      /* -------------------------------------------------------------
+         4. PROCESSOR SEARCH DROPDOWN & SEND RECORD
+      ------------------------------------------------------------- */
+      let selectedProcessor = '';
+
+      function renderProcessorDropdown(query) {
+        const dd = $('processorDropdown');
+        dd.innerHTML = '';
+        const filtered = STAFF_LIST.filter(s => s.toLowerCase().includes(query.toLowerCase()));
+
+        if (filtered.length === 0) {
+          dd.classList.add('hidden');
+          return;
+        }
+
+        filtered.forEach(name => {
+          const div = document.createElement('div');
+          div.className = 'p-2.5 text-xs text-[#e8f1f0] hover:bg-[#2fc4b2]/20 hover:text-[#2fc4b2] cursor-pointer font-medium border-b border-[#25393d]/30';
+          div.textContent = name;
+          div.onclick = () => {
+            selectedProcessor = name;
+            $('inputProcessorSearch').value = name;
+            $('selectedProcessorVal').value = name;
+            dd.classList.add('hidden');
+            checkCanSend();
+          };
+          dd.appendChild(div);
+        });
+        dd.classList.remove('hidden');
+      }
+
+      $('inputProcessorSearch').onfocus = (e) => renderProcessorDropdown(e.target.value);
+      $('inputProcessorSearch').oninput = (e) => renderProcessorDropdown(e.target.value);
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('#inputProcessorSearch') && !e.target.closest('#processorDropdown')) {
+          $('processorDropdown').classList.add('hidden');
+        }
+      });
+
+      function checkCanSend() {
+        $('btnSendRecord').disabled = !(currentScannedData && selectedProcessor);
+      }
+
+      $('btnSendRecord').onclick = () => {
+        if (!currentScannedData || !selectedProcessor) return;
+
+        const dateStr = getTodayStr();
+        const newRecord = {
+          recordId: 'REC_' + Date.now(),
+          date: dateStr,
+          timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+          cccd: currentScannedData.id,
+          name: currentScannedData.name,
+          dob: currentScannedData.dob,
+          sender: currentUser || 'Khách',
+          processor: selectedProcessor,
+          status: 'Chưa kiểm tra' // 'Chưa kiểm tra', 'Chưa khám', 'Đã khám'
+        };
+
+        saveRecordToStorage(newRecord);
+        showToast(`Đã gửi dữ liệu tới ${selectedProcessor}`);
+        
+        // Reset Scanner Result UI
+        currentScannedData = null;
+        $('resCCCD').textContent = '—';
+        $('resName').textContent = '—';
+        $('resDOB').textContent = '—';
+        checkCanSend();
+
+        // Notify other tabs
+        if (broadcastChannel) {
+          broadcastChannel.postMessage({ type: 'SYNC_RECORDS' });
+        }
+        renderTable();
+      };
+
+      /* -------------------------------------------------------------
+         5. REALTIME STORAGE & TABLE RENDER
+      ------------------------------------------------------------- */
+      function getRecordsByDate(dateStr) {
+        const key = `tyt_records_${dateStr}`;
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : [];
+      }
+
+      function saveRecordToStorage(record) {
+        const key = `tyt_records_${record.date}`;
+        const list = getRecordsByDate(record.date);
+        list.unshift(record); // newest first
+        localStorage.setItem(key, JSON.stringify(list));
+      }
+
+      function updateRecordStatus(dateStr, recordId, newStatus) {
+        const key = `tyt_records_${dateStr}`;
+        let list = getRecordsByDate(dateStr);
+        list = list.map(item => {
+          if (item.recordId === recordId) {
+            return { ...item, status: newStatus };
+          }
+          return item;
+        });
+        localStorage.setItem(key, JSON.stringify(list));
+        
+        if (broadcastChannel) {
+          broadcastChannel.postMessage({ type: 'SYNC_RECORDS' });
+        }
+        renderTable();
+      }
+
+      // Listen for local storage changes across tabs
+      window.addEventListener('storage', (e) => {
+        if (e.key && e.key.startsWith('tyt_records_')) {
+          renderTable();
+        }
+      });
+
+      // Filter tabs
+      $('tabAll').onclick = () => {
+        activeTab = 'all';
+        $('tabAll').className = 'flex-1 py-1.5 font-semibold rounded-lg bg-[#2fc4b2] text-[#04201c] transition';
+        $('tabMyProcess').className = 'flex-1 py-1.5 font-semibold rounded-lg text-[#8fa8a8] hover:text-[#e8f1f0] transition';
+        renderTable();
+      };
+
+      $('tabMyProcess').onclick = () => {
+        activeTab = 'my';
+        $('tabMyProcess').className = 'flex-1 py-1.5 font-semibold rounded-lg bg-[#2fc4b2] text-[#04201c] transition';
+        $('tabAll').className = 'flex-1 py-1.5 font-semibold rounded-lg text-[#8fa8a8] hover:text-[#e8f1f0] transition';
+        renderTable();
+      };
+
+      $('filterDate').onchange = () => {
+        renderTable();
+      };
+
+      function renderTable() {
+        const dateVal = $('filterDate').value || getTodayStr();
+        let records = getRecordsByDate(dateVal);
+
+        if (activeTab === 'my') {
+          records = records.filter(r => r.processor === currentUser);
+        }
+
+        const tbody = $('tableRecordsBody');
+        tbody.innerHTML = '';
+
+        if (records.length === 0) {
+          $('emptyMessage').classList.remove('hidden');
+          return;
+        }
+        $('emptyMessage').classList.add('hidden');
+
+        records.forEach(rec => {
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-[#0f1a1c]/60 transition border-b border-[#25393d]/40';
+
+          // Determine badge style
+          let badgeClass = 'badge-unchecked';
+          if (rec.status === 'Chưa khám') badgeClass = 'badge-unexamined';
+          if (rec.status === 'Đã khám') badgeClass = 'badge-examined';
+
+          const isMyTask = (rec.processor === currentUser);
+
+          tr.innerHTML = `
+            <td class="p-2.5">
+              <div class="font-bold text-[#e8f1f0]">${rec.name}</div>
+              <div class="font-mono text-[11px] text-[#2fc4b2]">${rec.cccd} <span class="text-[#8fa8a8] font-sans">(${rec.timestamp})</span></div>
+            </td>
+            <td class="p-2.5 font-medium text-[#8fa8a8]">${rec.dob}</td>
+            <td class="p-2.5 font-medium text-[#e8f1f0]">${rec.sender}</td>
+            <td class="p-2.5 font-medium text-[#2fc4b2]">${rec.processor}</td>
+            <td class="p-2.5 text-center">
+              ${isMyTask ? `
+                <select data-id="${rec.recordId}" class="status-select cursor-pointer text-xs font-bold px-2.5 py-1 rounded-lg outline-none ${badgeClass}">
+                  <option value="Chưa kiểm tra" ${rec.status === 'Chưa kiểm tra' ? 'selected' : ''}>Chưa kiểm tra</option>
+                  <option value="Chưa khám" ${rec.status === 'Chưa khám' ? 'selected' : ''}>Chưa khám</option>
+                  <option value="Đã khám" ${rec.status === 'Đã khám' ? 'selected' : ''}>Đã khám</option>
+                </select>
+              ` : `
+                <span class="inline-block text-xs font-bold px-2.5 py-1 rounded-lg ${badgeClass}">
+                  ${rec.status}
+                </span>
+              `}
+            </td>
+          `;
+
+          tbody.appendChild(tr);
+        });
+
+        // Add event listener to Status Select elements
+        document.querySelectorAll('.status-select').forEach(sel => {
+          sel.onchange = (e) => {
+            const recId = e.target.getAttribute('data-id');
+            const newStatus = e.target.value;
+            updateRecordStatus(dateVal, recId, newStatus);
+            showToast(`Cập nhật trạng thái thành: ${newStatus}`);
+          };
+        });
+      }
+
+      /* -------------------------------------------------------------
+         6. EXPORT FILE JSON/CSV
+      ------------------------------------------------------------- */
+      $('btnExportData').onclick = () => {
+        const dateVal = $('filterDate').value || getTodayStr();
+        const records = getRecordsByDate(dateVal);
+
+        if (records.length === 0) {
+          showToast('Không có dữ liệu trong ngày này để xuất!');
+          return;
+        }
+
+        // Generate CSV Content with UTF-8 BOM
+        let csvContent = "\uFEFF";
+        csvContent += "STT,Số CCCD,Họ và Tên,Ngày Sinh,Người Gửi,Người Xử Lý,Thời Gian,Trạng Thái\n";
+
+        records.forEach((r, idx) => {
+          csvContent += `"${idx + 1}","${r.cccd}","${r.name}","${r.dob}","${r.sender}","${r.processor}","${r.timestamp}","${r.status}"\n`;
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `TYT_CatLai_DuLieu_${dateVal}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showToast('Đã tải xuống file CSV thành công!');
+      };
+
+      // App Initialization
+      window.onload = () => {
+        initLoginModal();
+        renderTable();
+      };
+
+    })();
+  </script>
+</body>
+</html>
