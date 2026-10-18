@@ -429,8 +429,8 @@ function showAlerts() {
     if (i.checked && i.dataset.k === 'vib') vibe();
   });
 }
-// Popup cho người gửi khi người xử lí đổi trạng thái (màu theo yêu cầu: chưa khám = xanh lá nhạt, đã khám = đỏ nhạt)
-const POPC = { chua_kham: ['#7dffb3', '#04301a'], da_kham: ['#ff8fa3', '#3a0610'], chua_kiem_tra: ['#9aa5a7', '#0b1214'] };
+// Popup cho người gửi khi người xử lí đổi trạng thái (cùng màu với bảng: chưa khám = đỏ nhạt, đã khám = xanh lá nhạt)
+const POPC = { chua_kham: ['#ff8fa3', '#3a0610'], da_kham: ['#7dffb3', '#04301a'], chua_kiem_tra: ['#9aa5a7', '#0b1214'] };
 function popups(list) {
   ting(); vibe();
   if (!SET.popup) return;
