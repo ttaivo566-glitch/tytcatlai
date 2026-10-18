@@ -5,8 +5,8 @@
       "$date": {
         "$id": {
           ".write": true,
-          ".validate": "newData.hasChildren(['cccd','name','dob','sender','handler','status','ts'])",
-          "status": { ".validate": "newData.val()=='chua_kiem_tra'||newData.val()=='chua_kham'||newData.val()=='da_kham'" }
+          ".validate": "newData.hasChildren(['cccd','sender','handler','status','ts'])",
+          "status": { ".validate": "newData.val()=='chua_kiem_tra'||newData.val()=='chua_kham'||newData.val()=='da_kham'||newData.val()=='da_huy'" }
         }
       }
     }
