@@ -125,6 +125,8 @@ th{color:var(--mute);font-weight:600;background:var(--panel)}
 .s-da_kham{background:#7dffb3;color:#04301a}
 button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
 #net{font-size:12px;margin-top:3px}
+.cp{background:transparent;border:1px solid var(--line);color:var(--mute);border-radius:8px;padding:5px 6px;margin-left:8px;vertical-align:middle;line-height:0;cursor:pointer}
+.cp:hover{color:var(--text);background:#1e3236}
 #alerts{font-size:12px;color:var(--mute);margin-top:4px}
 .s-da_huy{background:#2a3436;color:#8fa8a8;text-decoration:line-through}
 .cancel{border:1px solid var(--bad);color:var(--bad);background:transparent;border-radius:999px;padding:5px 10px;font-size:12px;margin-left:6px}
@@ -220,10 +222,25 @@ function picker(box, onChange, init) {
 }
 
 /* ---------- Bảng & xuất file ---------- */
+const CP_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+const CP_LAB = { cccd: 'số CCCD', name: 'họ và tên', dob: 'ngày sinh' };
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select(); let ok = false;
+    try { ok = document.execCommand('copy'); } catch (_) {}
+    ta.remove(); return ok;
+  }
+}
+// mode 'send': ẩn cột Người gửi | mode 'proc': ẩn cột Người xử lí, thêm nút sao chép (chỉ ẩn hiển thị, CSV vẫn đủ cột)
 function table(rows, mode) {
   if (!rows.length) return '<div class="empty">Chưa có dữ liệu cho ngày này</div>';
-  return '<div class="tw"><table><thead><tr><th>Số CCCD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Người gửi yêu cầu</th><th>Người xử lí</th><th>Trạng thái xử lí</th></tr></thead><tbody>' +
-    rows.map(r => '<tr><td>' + esc(r.cccd) + '</td><td>' + esc(r.name) + '</td><td>' + esc(r.dob) + '</td><td>' + esc(r.sender) + '</td><td>' + esc(r.handler) + '</td><td>' +
+  const cp = (r, f) => esc(r[f]) + (mode === 'proc' && r[f] ? '<button class="cp" data-cp="' + f + '" data-r="' + esc(r.id) + '" title="Sao chép ' + CP_LAB[f] + '" aria-label="Sao chép ' + CP_LAB[f] + '">' + CP_ICON + '</button>' : '');
+  return '<div class="tw"><table><thead><tr><th>Số CCCD</th><th>Họ và tên</th><th>Ngày sinh</th>' +
+    (mode === 'send' ? '' : '<th>Người gửi yêu cầu</th>') + (mode === 'proc' ? '' : '<th>Người xử lí</th>') + '<th>Trạng thái xử lí</th></tr></thead><tbody>' +
+    rows.map(r => '<tr><td>' + cp(r, 'cccd') + '</td><td>' + cp(r, 'name') + '</td><td>' + cp(r, 'dob') + '</td>' +
+      (mode === 'send' ? '' : '<td>' + esc(r.sender) + '</td>') + (mode === 'proc' ? '' : '<td>' + esc(r.handler) + '</td>') + '<td>' +
       (mode === 'proc' ? CH.map(k => '<button class="st ' + (r.status === k ? 's-' + k : 'off') + '" data-id="' + esc(r.id) + '" data-s="' + k + '">' + (r.status === k ? '✓ ' : '') + ST[k] + '</button>').join('')
             : '<span class="st s-' + esc(r.status) + '">' + (ST[r.status] || '') + '</span>' +
               (r.status === 'chua_kiem_tra' ? '<button class="cancel" data-x="' + esc(r.id) + '">Huỷ</button>' : '')) + '</td></tr>').join('') + '</tbody></table></div>';
@@ -252,6 +269,12 @@ function wire(filter, mode) {
   };
   dt.onchange = () => { if (dt.value) go(); };
   box.onclick = e => {
+    const c = e.target.closest('button[data-cp]');
+    if (c) {
+      const r = rows.find(r => r.id === c.dataset.r);
+      if (r) copyText(r[c.dataset.cp]).then(ok => toast(ok ? 'Đã sao chép ' + CP_LAB[c.dataset.cp] : 'Không sao chép được'));
+      return;
+    }
     const x = e.target.closest('button[data-x]');
     if (x) {
       const r = rows.find(r => r.id === x.dataset.x);
