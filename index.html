@@ -130,8 +130,8 @@ button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
-<script src="config.js"></script>
-<script src="scanner.js"></script>
+<script src="config.js?v=2"></script>
+<script src="scanner.js?v=2"></script>
 </head>
 <body>
 <main id="main">
@@ -153,7 +153,7 @@ const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).
 const ls = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
              set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
              del: k => { try { localStorage.removeItem(k); } catch (e) {} } };
-function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 1600); }
+function toast(m, ms) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms || 1600); }
 
 /* ---------- Dữ liệu: Firebase Realtime Database (hoặc lưu tạm trên máy nếu chưa cấu hình) ---------- */
 function setNet(k, m) {
@@ -233,7 +233,7 @@ function wire(filter, edit) {
     if (unwatch) unwatch();
     unwatch = DB.listen(dt.value, m => {
       rows = Object.keys(m).map(id => Object.assign({}, m[id], { id, date: dt.value })).filter(filter).sort((a, b) => b.ts - a.ts);
-      box.innerHTML = table(rows, edit); $('#cnt').textContent = rows.length + ' dòng';
+      box.innerHTML = table(rows, edit); const tot = Object.keys(m).length; $('#cnt').textContent = rows.length + ' dòng' + (tot > rows.length ? ' · ' + (tot - rows.length) + ' dòng của người khác trong ngày' : '');
     });
   };
   dt.onchange = () => { if (dt.value) go(); };
@@ -277,8 +277,11 @@ function viewSend() {
   $('#redo').onclick = () => { cur = null; scan.reset(); upd(); };
   $('#send').onclick = () => {
     if (!cur || !handler) return;
-    DB.add(today(), { cccd: cur.id, name: cur.name, dob: cur.dob, sender: me, handler, status: 'chua_kiem_tra', ts: Date.now() }).catch(e => toast('Gửi lỗi: ' + (e.code || e.message)));
-    toast('Đã gửi cho ' + handler); cur = null; scan.reset(); upd();
+    const h = handler, t0 = setTimeout(() => toast('Chưa gửi được lên máy chủ — kiểm tra mạng/cấu hình Firebase', 5000), 5000);
+    DB.add(today(), { cccd: cur.id, name: cur.name, dob: cur.dob, sender: me, handler: h, status: 'chua_kiem_tra', ts: Date.now() })
+      .then(() => { clearTimeout(t0); toast(DB.mode === 'local' ? 'Đã lưu trên máy này (chế độ thử — máy khác chưa thấy)' : 'Đã gửi cho ' + h + ' ✓', 3000); })
+      .catch(e => { clearTimeout(t0); toast('Gửi lỗi: ' + (e.code || e.message), 4000); });
+    toast('Đang gửi…'); cur = null; scan.reset(); upd();
   };
   wire(r => r.sender === me, false);
 }
