@@ -125,6 +125,10 @@ th{color:var(--mute);font-weight:600;background:var(--panel)}
 .s-da_kham{background:#7dffb3;color:#04301a}
 button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
 #net{font-size:12px;margin-top:3px}
+#pops{position:fixed;top:calc(env(safe-area-inset-top) + 10px);left:10px;right:10px;z-index:60;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.pop{pointer-events:auto;width:100%;max-width:460px;margin:0 auto;padding:14px 16px;border-radius:14px;font-size:16px;line-height:1.35;box-shadow:0 6px 22px rgba(0,0,0,.5);cursor:pointer}
+.setp{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:8px;padding:9px 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;font-size:13px;color:var(--text)}
+.setp label{display:flex;align-items:center;gap:6px}
 .cp{background:transparent;border:1px solid var(--line);color:var(--mute);border-radius:8px;padding:5px 6px;margin-left:8px;vertical-align:middle;line-height:0;cursor:pointer}
 .cp:hover{color:var(--text);background:#1e3236}
 #alerts{font-size:12px;color:var(--mute);margin-top:4px}
@@ -151,6 +155,7 @@ button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
   <div class="banner" id="banner" hidden>Chế độ thử: chưa cấu hình Firebase nên dữ liệu chỉ lưu trên máy này (điền config.js để đồng bộ realtime).</div>
   <div id="app"></div>
 </main>
+<div id="pops"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -348,9 +353,14 @@ function viewProc() {
 
 /* ---------- Thông báo cho người xử lí: tên tab + âm thanh + thông báo Windows ---------- */
 const BASE = 'TRẠM Y TẾ CÁT LÁI';
+const SET = Object.assign({ popup: true, sound: true, vib: true }, (() => { try { return JSON.parse(ls.get('cl_set')) || {}; } catch (e) { return {}; } })());
+const saveSet = () => ls.set('cl_set', JSON.stringify(SET));
+let setOpen = false, prevSt = null;
 let aU = null, aUser = null, aDate = '', known = null, pend = 0, flash = null, ac = null;
 function unlock() { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch (e) {} }
+function vibe() { try { if (SET.vib && navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {} }
 function ting() {
+  if (!SET.sound) return;
   unlock(); if (!ac) return;
   try {
     [880, 1320].forEach((f, i) => {
@@ -373,15 +383,37 @@ function setTitle(n) {
 function showAlerts() {
   const e = $('#alerts'); if (!e) return;
   const p = window.Notification ? Notification.permission : 'none';
-  e.innerHTML = !me ? '' : p === 'default' ? '<button class="mini" id="en">🔔 Bật thông báo</button>' : p === 'granted' ? '🔔 Thông báo đang bật' :
+  let h = !me ? '' : p === 'default' ? '<button class="mini" id="en">🔔 Bật thông báo Windows</button>' : p === 'granted' ? '🔔 Thông báo đang bật' :
     p === 'denied' ? '🔕 Thông báo bị chặn — bật lại ở biểu tượng ổ khoá cạnh địa chỉ trang' : '';
+  if (me) h += ' <button class="mini" id="setb">⚙ Cài đặt thông báo</button>' + (setOpen ? '<div class="setp">' +
+    [['popup', 'Popup trên màn hình'], ['sound', 'Âm thanh'], ['vib', 'Rung' + (navigator.vibrate ? '' : ' (máy này không hỗ trợ)')]].map(a =>
+      '<label><input type="checkbox" data-k="' + a[0] + '"' + (SET[a[0]] ? ' checked' : '') + (a[0] === 'vib' && !navigator.vibrate ? ' disabled' : '') + '> ' + a[1] + '</label>').join('') + '</div>' : '');
+  e.innerHTML = h;
   const b = $('#en'); if (b) b.onclick = () => { ting(); Notification.requestPermission().then(showAlerts); };
+  const sb = $('#setb'); if (sb) sb.onclick = () => { setOpen = !setOpen; showAlerts(); };
+  e.querySelectorAll('input[data-k]').forEach(i => i.onchange = () => {
+    SET[i.dataset.k] = i.checked; saveSet();
+    if (i.checked && i.dataset.k === 'sound') ting();
+    if (i.checked && i.dataset.k === 'vib') vibe();
+  });
+}
+// Popup cho người gửi khi người xử lí đổi trạng thái (màu theo yêu cầu: chưa khám = xanh lá nhạt, đã khám = đỏ nhạt)
+const POPC = { chua_kham: ['#7dffb3', '#04301a'], da_kham: ['#ff8fa3', '#3a0610'], chua_kiem_tra: ['#9aa5a7', '#0b1214'] };
+function popups(list) {
+  ting(); vibe();
+  if (!SET.popup) return;
+  list.forEach(x => {
+    const c = POPC[x.st] || POPC.chua_kiem_tra, d = document.createElement('div');
+    d.className = 'pop'; d.style.background = c[0]; d.style.color = c[1];
+    d.innerHTML = 'Hệ thống thông báo, <b>' + esc(x.name) + '</b>: ' + esc((ST[x.st] || '').toLowerCase());
+    d.onclick = () => d.remove(); $('#pops').appendChild(d); setTimeout(() => d.remove(), 7000);
+  });
 }
 function notify(senders) {
-  ting();
+  ting(); vibe();
   const who = Array.from(new Set(senders)).join(', '), n = senders.length;
   const body = (n > 1 ? n + ' yêu cầu mới' : 'Có yêu cầu mới') + ' từ ' + who;
-  toast(body, 4000);
+  if (SET.popup) toast(body, 4000);
   try {
     if (window.Notification && Notification.permission === 'granted') {
       const x = new Notification(BASE, { body, tag: 'yc-moi', renotify: true });
@@ -393,6 +425,8 @@ function stopAlerts() { if (aU) aU(); aU = null; aUser = null; known = null; pen
 function startAlerts() {
   stopAlerts(); if (!me) return;
   aUser = me; aDate = today();
+  const key = 'cl_st:' + me + ':' + aDate;
+  try { prevSt = JSON.parse(ls.get(key)); } catch (e) { prevSt = null; }
   aU = DB.listen(aDate, m => {
     const mine = Object.keys(m).filter(id => m[id].handler === me && !m[id].cancelled && m[id].status !== 'da_huy');
     const fresh = known ? mine.filter(id => !known.has(id)) : [];
@@ -400,6 +434,15 @@ function startAlerts() {
     pend = mine.filter(id => m[id].status === 'chua_kiem_tra').length;
     setTitle(pend);
     if (fresh.length) notify(fresh.map(id => m[id].sender));
+    // người gửi: báo khi người xử lí đổi trạng thái dòng mình đã gửi (so với lần trước, kể cả lúc trang đóng)
+    const cur = {}, chg = [];
+    Object.keys(m).forEach(id => {
+      const r = m[id]; if (r.sender !== me) return;
+      const st = r.cancelled ? 'da_huy' : r.status; cur[id] = st;
+      if (prevSt && prevSt[id] && prevSt[id] !== st && st !== 'da_huy') chg.push({ name: r.name || ('CCCD …' + String(r.cccd).slice(-4)), st });
+    });
+    if (chg.length) popups(chg);
+    prevSt = cur; ls.set(key, JSON.stringify(cur));
   });
 }
 addEventListener('pointerdown', unlock, { once: true });
