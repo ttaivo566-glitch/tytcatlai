@@ -235,7 +235,7 @@ function initScanner() {
     api.onResult && api.onResult(d);
     beep();
   }
-  function set(id, v) { const e = $(id); e.textContent = v || '—'; e.classList.toggle('empty', !v); }
+  function set(id, v) { const e = $(id); if (e.tagName === 'INPUT') { e.value = v || ''; e.dispatchEvent(new Event('input')); return; } e.textContent = v || '—'; e.classList.toggle('empty', !v); }
   function beep() {
     try {
       unlockAudio();
