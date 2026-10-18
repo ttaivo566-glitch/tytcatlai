@@ -125,6 +125,7 @@ th{color:var(--mute);font-weight:600;background:var(--panel)}
 .s-da_kham{background:#7dffb3;color:#04301a}
 button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
 #net{font-size:12px;margin-top:3px}
+#alerts{font-size:12px;color:var(--mute);margin-top:4px}
 .s-da_huy{background:#2a3436;color:#8fa8a8;text-decoration:line-through}
 .cancel{border:1px solid var(--bad);color:var(--bad);background:transparent;border-radius:999px;padding:5px 10px;font-size:12px;margin-left:6px}
 .in{width:100%;background:transparent;border:0;border-bottom:1px solid var(--line);color:var(--text);font-size:18px;font-weight:600;padding:5px 0;outline:none;margin-top:2px}
@@ -144,7 +145,7 @@ button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
 </head>
 <body>
 <main id="main">
-  <header><h1 class="brand">TRẠM Y TẾ CÁT LÁI</h1><div id="who"></div><div id="net"></div></header>
+  <header><h1 class="brand">TRẠM Y TẾ CÁT LÁI</h1><div id="who"></div><div id="net"></div><div id="alerts"></div></header>
   <div class="banner" id="banner" hidden>Chế độ thử: chưa cấu hình Firebase nên dữ liệu chỉ lưu trên máy này (điền config.js để đồng bộ realtime).</div>
   <div id="app"></div>
 </main>
@@ -322,6 +323,66 @@ function viewProc() {
   wire(r => r.handler === me && r.status !== 'da_huy', 'proc');
 }
 
+/* ---------- Thông báo cho người xử lí: tên tab + âm thanh + thông báo Windows ---------- */
+const BASE = 'TRẠM Y TẾ CÁT LÁI';
+let aU = null, aUser = null, aDate = '', known = null, pend = 0, flash = null, ac = null;
+function unlock() { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch (e) {} }
+function ting() {
+  unlock(); if (!ac) return;
+  try {
+    [880, 1320].forEach((f, i) => {
+      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + i * .18;
+      o.frequency.value = f; o.connect(g); g.connect(ac.destination);
+      g.gain.setValueAtTime(.25, t); g.gain.exponentialRampToValueAtTime(.001, t + .35); o.start(t); o.stop(t + .4);
+    });
+  } catch (e) {}
+}
+function setTitle(n) {
+  clearInterval(flash); document.title = BASE;
+  if (n > 0) {
+    const t = '(' + n + ') Có yêu cầu mới'; document.title = t;
+    if (document.hidden) flash = setInterval(() => {
+      if (!document.hidden) { clearInterval(flash); document.title = t; return; }
+      document.title = document.title === t ? '🔔 ' + t : t;
+    }, 1000);
+  }
+}
+function showAlerts() {
+  const e = $('#alerts'); if (!e) return;
+  const p = window.Notification ? Notification.permission : 'none';
+  e.innerHTML = !me ? '' : p === 'default' ? '<button class="mini" id="en">🔔 Bật thông báo</button>' : p === 'granted' ? '🔔 Thông báo đang bật' :
+    p === 'denied' ? '🔕 Thông báo bị chặn — bật lại ở biểu tượng ổ khoá cạnh địa chỉ trang' : '';
+  const b = $('#en'); if (b) b.onclick = () => { ting(); Notification.requestPermission().then(showAlerts); };
+}
+function notify(senders) {
+  ting();
+  const who = Array.from(new Set(senders)).join(', '), n = senders.length;
+  const body = (n > 1 ? n + ' yêu cầu mới' : 'Có yêu cầu mới') + ' từ ' + who;
+  toast(body, 4000);
+  try {
+    if (window.Notification && Notification.permission === 'granted') {
+      const x = new Notification(BASE, { body, tag: 'yc-moi', renotify: true });
+      x.onclick = () => { window.focus(); location.hash = '#/' + slugOf(me) + '/xuly'; x.close(); };
+    }
+  } catch (e) {}
+}
+function stopAlerts() { if (aU) aU(); aU = null; aUser = null; known = null; pend = 0; setTitle(0); }
+function startAlerts() {
+  stopAlerts(); if (!me) return;
+  aUser = me; aDate = today();
+  aU = DB.listen(aDate, m => {
+    const mine = Object.keys(m).filter(id => m[id].handler === me && !m[id].cancelled && m[id].status !== 'da_huy');
+    const fresh = known ? mine.filter(id => !known.has(id)) : [];
+    known = new Set(Object.keys(m));
+    pend = mine.filter(id => m[id].status === 'chua_kiem_tra').length;
+    setTitle(pend);
+    if (fresh.length) notify(fresh.map(id => m[id].sender));
+  });
+}
+addEventListener('pointerdown', unlock, { once: true });
+document.addEventListener('visibilitychange', () => setTitle(pend));
+setInterval(() => { if (me && aDate !== today()) startAlerts(); }, 60000);
+
 /* ---------- Điều hướng: #/tenviettlien/quet | /xuly ---------- */
 function route() {
   if (scan) { scan.stop(); scan = null; }
@@ -332,7 +393,9 @@ function route() {
   $('#main').className = ok && p[2] === 'xuly' ? 'wide' : '';
   $('#who').innerHTML = ok ? esc(me) + '<a id="out">Đổi người</a>' : '';
   if (ok) $('#out').onclick = () => { ls.del('cl_user'); location.hash = '#/'; route(); };
-  if (!ok) return login();
+  if (!ok) { stopAlerts(); showAlerts(); return login(); }
+  if (aUser !== me || aDate !== today()) startAlerts();
+  showAlerts();
   p[2] === 'quet' ? viewSend() : p[2] === 'xuly' ? viewProc() : viewHome();
 }
 addEventListener('hashchange', route);
