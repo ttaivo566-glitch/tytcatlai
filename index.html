@@ -138,7 +138,7 @@ button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
 (function () {
   var ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (ios) document.write('<script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"><\/script>');
-  document.write('<script src="' + (ios ? 'scanner-ios.js' : 'scanner-android.js') + '?v=3"><\/script>');
+  document.write('<script src="' + (ios ? 'scanner-ios.js' : 'scanner-android.js') + '?v=4"><\/script>');
 })();
 </script>
 </head>
@@ -183,7 +183,7 @@ const DB = (() => {
     return { mode: 'cloud',
       listen: (d, cb) => { const r = db.ref('requests/' + d); const f = r.on('value', s => cb(s.val() || {}), e => setNet('err', e.code || e.message)); return () => r.off('value', f); },
       add: (d, o) => db.ref('requests/' + d).push(o),
-      set: (d, id, s) => db.ref('requests/' + d + '/' + id).update({ status: s, updated: Date.now() }),
+      set: (d, id, s) => db.ref('requests/' + d + '/' + id).update(Object.assign(s === 'da_huy' ? { cancelled: true } : { status: s }, { updated: Date.now() })),
       all: () => db.ref('requests').once('value').then(s => s.val() || {}) };
   }
   const subs = new Set();
@@ -193,7 +193,7 @@ const DB = (() => {
   return { mode: 'local', why,
     listen: (d, cb) => { const f = () => cb(rd(d)); subs.add(f); f(); return () => subs.delete(f); },
     add: (d, o) => { const m = rd(d); m['l' + Date.now()] = o; wr(d, m); return Promise.resolve(); },
-    set: (d, id, s) => { const m = rd(d); if (m[id]) { m[id].status = s; wr(d, m); } return Promise.resolve(); },
+    set: (d, id, s) => { const m = rd(d); if (m[id]) { if (s === 'da_huy') m[id].cancelled = true; else m[id].status = s; wr(d, m); } return Promise.resolve(); },
     all: () => { const o = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.indexOf('req:') === 0) o[k.slice(4)] = JSON.parse(localStorage.getItem(k)); } } catch (e) {} return Promise.resolve(o); } };
 })();
 if (DB.mode === 'local') { $('#banner').hidden = false; if (DB.why) $('#banner').textContent = DB.why; setNet(DB.why ? 'err' : 'local', DB.why); }
@@ -227,6 +227,7 @@ function table(rows, mode) {
             : '<span class="st s-' + esc(r.status) + '">' + (ST[r.status] || '') + '</span>' +
               (r.status === 'chua_kiem_tra' ? '<button class="cancel" data-x="' + esc(r.id) + '">Huỷ</button>' : '')) + '</td></tr>').join('') + '</tbody></table></div>';
 }
+const n1 = r => r.cancelled ? Object.assign({}, r, { status: 'da_huy' }) : r;
 function download(rows, tag) {
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"', t = v => q('="' + v + '"');
   const lines = [['Ngày', 'Số CCCD', 'Họ và tên', 'Ngày sinh', 'Người gửi', 'Người xử lí', 'Trạng thái', 'Giờ gửi'].map(q).join(',')]
@@ -244,8 +245,8 @@ function wire(filter, mode) {
   const go = () => {
     if (unwatch) unwatch();
     unwatch = DB.listen(dt.value, m => {
-      rows = Object.keys(m).map(id => Object.assign({}, m[id], { id, date: dt.value })).filter(filter).sort((a, b) => b.ts - a.ts);
-      box.innerHTML = table(rows, mode); const oth = Object.keys(m).filter(id => !filter(m[id]) && m[id].status !== 'da_huy').length; $('#cnt').textContent = rows.length + ' dòng' + (oth ? ' · ' + oth + ' dòng của người khác trong ngày' : '');
+      rows = Object.keys(m).map(id => n1(Object.assign({}, m[id], { id, date: dt.value }))).filter(filter).sort((a, b) => b.ts - a.ts);
+      box.innerHTML = table(rows, mode); const oth = Object.keys(m).filter(id => !filter(m[id]) && !m[id].cancelled && m[id].status !== 'da_huy').length; $('#cnt').textContent = rows.length + ' dòng' + (oth ? ' · ' + oth + ' dòng của người khác trong ngày' : '');
     });
   };
   dt.onchange = () => { if (dt.value) go(); };
@@ -260,7 +261,7 @@ function wire(filter, mode) {
     const b = e.target.closest('button[data-id]'); if (b) DB.set(dt.value, b.dataset.id, b.dataset.s).catch(e => toast('Lỗi: ' + (e.code || e.message))); };
   $('#c1').onclick = () => download(rows, dt.value);
   $('#c2').onclick = () => DB.all().then(all => {
-    const out = []; for (const d in all) for (const id in all[d]) { const r = Object.assign({}, all[d][id], { id, date: d }); if (filter(r)) out.push(r); }
+    const out = []; for (const d in all) for (const id in all[d]) { const r = n1(Object.assign({}, all[d][id], { id, date: d })); if (filter(r)) out.push(r); }
     download(out.sort((a, b) => a.ts - b.ts), 'tat-ca');
   });
   go();
@@ -301,8 +302,10 @@ function viewSend() {
   ['v-id', 'v-name', 'v-dob'].forEach(id => $('#' + id).addEventListener('input', upd));
   $('#v-dob').addEventListener('blur', e => { const v = e.target.value.trim(); if (/^\d{8}$/.test(v)) e.target.value = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4); });
   picker($('#pk'), n => { handler = n; upd(); }, ls.get('cl_h:' + me)); upd();
-  scan = initScanner(); scan.onResult = upd;
-  $('#redo').onclick = () => { scan.reset(); upd(); };
+  const clearF = () => ['v-id', 'v-name', 'v-dob'].forEach(id => $('#' + id).value = '');
+  scan = initScanner();
+  scan.onResult = d => { $('#v-id').value = d.id || ''; $('#v-name').value = d.name || ''; $('#v-dob').value = d.dob || ''; upd(); };
+  $('#redo').onclick = () => { clearF(); scan.reset(); upd(); };
   $('#send').onclick = () => {
     if ($('#send').disabled) return;
     const rec = { cccd: val('v-id'), name: val('v-name'), dob: val('v-dob') };
@@ -310,7 +313,7 @@ function viewSend() {
     DB.add(today(), Object.assign(rec, { sender: me, handler: h, status: 'chua_kiem_tra', ts: Date.now() }))
       .then(() => { clearTimeout(t0); toast(DB.mode === 'local' ? 'Đã lưu trên máy này (chế độ thử — máy khác chưa thấy)' : 'Đã gửi cho ' + h + ' ✓', 3000); })
       .catch(e => { clearTimeout(t0); toast('Gửi lỗi: ' + (e.code || e.message), 4000); });
-    toast('Đang gửi…'); scan.reset(); upd();
+    toast('Đang gửi…'); clearF(); scan.reset(); upd();
   };
   wire(r => r.sender === me, 'send');
 }
