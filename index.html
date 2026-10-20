@@ -125,6 +125,14 @@ th{color:var(--mute);font-weight:600;background:var(--panel)}
 .s-da_kham{background:#7dffb3;color:#04301a}
 button.st.off{background:transparent;color:var(--mute);border-color:var(--line)}
 #net{font-size:12px;margin-top:3px}
+.bcode{font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+.dim{opacity:.4;font-size:13px}
+.bh-w{display:flex;gap:6px;align-items:center}
+.bh{width:175px;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:7px 9px;font-size:14px;font-weight:700;text-transform:uppercase}
+.sendrow{display:flex;gap:8px;align-items:stretch}
+.sendrow .act{flex:1;width:auto}
+.chk{flex:1;display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:14px;font-weight:600;background:var(--panel);cursor:pointer;line-height:1.25}
+.chk input{width:20px;height:20px;flex:none;accent-color:var(--accent)}
 .toast{width:max-content;max-width:calc(100vw - 32px);white-space:normal;overflow-wrap:anywhere;text-align:center;border-radius:16px;line-height:1.4}
 .pop{white-space:normal;overflow-wrap:anywhere;word-break:break-word;font-size:16px}
 .pop .pn{font-size:18px;font-weight:700;margin-bottom:2px}
@@ -198,6 +206,7 @@ const DB = (() => {
     return { mode: 'cloud',
       listen: (d, cb) => { const r = db.ref('requests/' + d); const f = r.on('value', s => cb(s.val() || {}), e => setNet('err', e.code || e.message)); return () => r.off('value', f); },
       add: (d, o) => db.ref('requests/' + d).push(o),
+      patch: (d, id, o) => db.ref('requests/' + d + '/' + id).update(Object.assign({}, o, { updated: Date.now() })),
       set: (d, id, s) => db.ref('requests/' + d + '/' + id).update(Object.assign(s === 'da_huy' ? { cancelled: true } : { status: s }, { updated: Date.now() })),
       all: () => db.ref('requests').once('value').then(s => s.val() || {}) };
   }
@@ -208,6 +217,7 @@ const DB = (() => {
   return { mode: 'local', why,
     listen: (d, cb) => { const f = () => cb(rd(d)); subs.add(f); f(); return () => subs.delete(f); },
     add: (d, o) => { const m = rd(d); m['l' + Date.now()] = o; wr(d, m); return Promise.resolve(); },
+    patch: (d, id, o) => { const m = rd(d); if (m[id]) { Object.assign(m[id], o); wr(d, m); } return Promise.resolve(); },
     set: (d, id, s) => { const m = rd(d); if (m[id]) { if (s === 'da_huy') m[id].cancelled = true; else m[id].status = s; wr(d, m); } return Promise.resolve(); },
     all: () => { const o = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.indexOf('req:') === 0) o[k.slice(4)] = JSON.parse(localStorage.getItem(k)); } } catch (e) {} return Promise.resolve(o); } };
 })();
@@ -249,20 +259,26 @@ async function copyText(t) {
 function table(rows, mode) {
   if (!rows.length) return '<div class="empty">Chưa có dữ liệu cho ngày này</div>';
   const cp = (r, f) => esc(r[f]) + (mode === 'proc' && r[f] ? '<button class="cp" data-cp="' + f + '" data-r="' + esc(r.id) + '" title="Sao chép ' + CP_LAB[f] + '" aria-label="Sao chép ' + CP_LAB[f] + '">' + CP_ICON + '</button>' : '');
+  const showB = rows.some(r => r.bhytReq), up = v => esc(String(v == null ? '' : v).toUpperCase());
+  // Cột Mã BHYT: người xử lí tự điền (chỉ dòng có yêu cầu); người gửi xem kết quả in đậm in hoa
+  const bcell = r => mode === 'proc'
+    ? (r.bhytReq ? '<div class="bh-w"><input class="bh" data-b="' + esc(r.id) + '" value="' + up(r._d != null ? r._d : r.bhytCode) + '" placeholder="Nhập mã BHYT" maxlength="40" autocomplete="off"><button class="mini" data-bs="' + esc(r.id) + '">Lưu</button></div>' : '<span class="dim">Không yêu cầu</span>')
+    : (r.bhytReq ? (r.bhytCode ? '<b class="bcode">' + up(r.bhytCode) + '</b>' : '<span class="dim">Đang chờ tra…</span>') : '<span class="dim">—</span>');
   return '<div class="tw"><table><thead><tr><th>Số CCCD</th><th>Họ và tên</th><th>Ngày sinh</th>' +
-    (mode === 'send' ? '' : '<th>Người gửi yêu cầu</th>') + (mode === 'proc' ? '' : '<th>Người xử lí</th>') + '<th>Trạng thái xử lí</th></tr></thead><tbody>' +
+    (mode === 'send' ? '' : '<th>Người gửi yêu cầu</th>') + (mode === 'proc' ? '' : '<th>Người xử lí</th>') + '<th>Trạng thái xử lí</th>' + (showB ? '<th>Mã BHYT</th>' : '') + '</tr></thead><tbody>' +
     rows.map(r => '<tr><td>' + cp(r, 'cccd') + '</td><td>' + cp(r, 'name') + '</td><td>' + cp(r, 'dob') + '</td>' +
       (mode === 'send' ? '' : '<td>' + esc(r.sender) + '</td>') + (mode === 'proc' ? '' : '<td>' + esc(r.handler) + '</td>') + '<td>' +
       (mode === 'proc' ? CH.map(k => '<button class="st ' + (r.status === k ? 's-' + k : 'off') + '" data-id="' + esc(r.id) + '" data-s="' + k + '">' + (r.status === k ? '✓ ' : '') + ST[k] + '</button>').join('')
             : '<span class="st s-' + esc(r.status) + '">' + (ST[r.status] || '') + '</span>' +
-              (r.status === 'chua_kiem_tra' ? '<button class="cancel" data-x="' + esc(r.id) + '">Huỷ</button>' : '')) + '</td></tr>').join('') + '</tbody></table></div>';
+              (r.status === 'chua_kiem_tra' ? '<button class="cancel" data-x="' + esc(r.id) + '">Huỷ</button>' : '')) + '</td>' +
+      (showB ? '<td>' + bcell(r) + '</td>' : '') + '</tr>').join('') + '</tbody></table></div>';
 }
 function closeAsk() { const a = $('#ask'); if (a) a.remove(); }
 // Hỏi xác nhận ngay cạnh nút trạng thái (popup nổi, không mất khi bảng cập nhật realtime)
-function askStatus(anchor, name, key, onYes) {
+function askMsg(anchor, html, onYes) {
   closeAsk();
   const d = document.createElement('div'); d.id = 'ask'; d.className = 'ask';
-  d.innerHTML = '<div>Đổi trạng thái <b>' + esc(name) + '</b> sang <span class="st s-' + key + '">' + ST[key] + '</span>?<br><span style="color:var(--mute);font-size:12px">Người gửi sẽ nhận thông báo trên điện thoại.</span></div>' +
+  d.innerHTML = '<div>' + html + '<br><span style="color:var(--mute);font-size:12px">Người gửi sẽ nhận thông báo trên điện thoại.</span></div>' +
     '<div class="ab"><button class="mini" id="ano">Không</button><button class="act" id="ayes">Xác nhận</button></div>';
   document.body.appendChild(d);
   const r = anchor.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
@@ -272,13 +288,16 @@ function askStatus(anchor, name, key, onYes) {
   $('#ano').onclick = closeAsk;
   $('#ayes').onclick = () => { closeAsk(); onYes(); };
 }
+function askStatus(anchor, name, key, onYes) {
+  askMsg(anchor, 'Đổi trạng thái <b>' + esc(name) + '</b> sang <span class="st s-' + key + '">' + ST[key] + '</span>?', onYes);
+}
 addEventListener('pointerdown', e => { if (!(e.target.closest && e.target.closest('.ask'))) closeAsk(); });
 addEventListener('keydown', e => { if (e.key === 'Escape') closeAsk(); });
 const n1 = r => r.cancelled ? Object.assign({}, r, { status: 'da_huy' }) : r;
 function download(rows, tag) {
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"', t = v => q('="' + v + '"');
-  const lines = [['Ngày', 'Số CCCD', 'Họ và tên', 'Ngày sinh', 'Người gửi', 'Người xử lí', 'Trạng thái', 'Giờ gửi'].map(q).join(',')]
-    .concat(rows.map(r => [q(r.date), t(r.cccd), q(r.name), t(r.dob), q(r.sender), q(r.handler), q(ST[r.status]), q(new Date(r.ts).toLocaleString('vi-VN'))].join(',')));
+  const lines = [['Ngày', 'Số CCCD', 'Họ và tên', 'Ngày sinh', 'Người gửi', 'Người xử lí', 'Trạng thái', 'Giờ gửi', 'Yêu cầu BHYT', 'Mã BHYT'].map(q).join(',')]
+    .concat(rows.map(r => [q(r.date), t(r.cccd), q(r.name), t(r.dob), q(r.sender), q(r.handler), q(ST[r.status]), q(new Date(r.ts).toLocaleString('vi-VN')), q(r.bhytReq ? 'Có' : 'Không'), q(String(r.bhytCode || '').toUpperCase())].join(',')));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
   a.download = 'tram-y-te-cat-lai_' + tag + '.csv'; document.body.appendChild(a); a.click();
@@ -288,16 +307,45 @@ const bar = () => '<div class="bar"><input type="date" id="dt" value="' + today(
 
 let me = null, scan = null, unwatch = null, dayCheck = null;
 function wire(filter, mode) {
-  const dt = $('#dt'), box = $('#tbl'); let rows = [];
+  const dt = $('#dt'), box = $('#tbl'); let rows = [], cnt = '', stale = false; const draft = {};
+  const render = () => {
+    const ae = document.activeElement;
+    if (ae && ae.classList && ae.classList.contains('bh') && box.contains(ae)) { stale = true; return; }  // đang gõ: chưa vẽ lại để khỏi mất con trỏ
+    rows.forEach(r => { if (draft[r.id] != null) r._d = draft[r.id]; });
+    box.innerHTML = table(rows, mode); $('#cnt').textContent = cnt;
+  };
   const go = () => {
     if (unwatch) unwatch();
     unwatch = DB.listen(dt.value, m => {
       rows = Object.keys(m).map(id => n1(Object.assign({}, m[id], { id, date: dt.value }))).filter(filter).sort((a, b) => b.ts - a.ts);
-      box.innerHTML = table(rows, mode); const oth = Object.keys(m).filter(id => !filter(m[id]) && !m[id].cancelled && m[id].status !== 'da_huy').length; $('#cnt').textContent = rows.length + ' dòng' + (oth ? ' · ' + oth + ' dòng của người khác trong ngày' : '');
+      const oth = Object.keys(m).filter(id => !filter(m[id]) && !m[id].cancelled && m[id].status !== 'da_huy').length;
+      cnt = rows.length + ' dòng' + (oth ? ' · ' + oth + ' dòng của người khác trong ngày' : '');
+      render();
     });
   };
+  const saveB = (id, anchor) => {
+    const inp = box.querySelector('input.bh[data-b="' + id + '"]'), r = rows.find(r => r.id === id), d0 = dt.value;
+    if (!inp || !r) return;
+    const code = inp.value.trim().toUpperCase();
+    if (!code) return toast('Chưa nhập mã BHYT');
+    if (code === String(r.bhytCode || '').toUpperCase()) return toast('Mã BHYT không thay đổi');
+    askMsg(anchor, 'Gửi mã BHYT <b class="bcode">' + esc(code) + '</b> cho <b>' + esc(r.name || r.cccd) + '</b>?',
+      () => { delete draft[id]; DB.patch(d0, id, { bhytCode: code }).catch(e => toast('Lỗi: ' + (e.code || e.message))); });
+  };
+  box.addEventListener('input', e => { const i = e.target; if (i.classList && i.classList.contains('bh')) draft[i.dataset.b] = i.value; });
+  box.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('bh')) {
+      e.preventDefault(); const id = e.target.dataset.b; saveB(id, box.querySelector('button[data-bs="' + id + '"]') || e.target);
+    }
+  });
+  box.addEventListener('focusout', e => {
+    if (!stale || (e.relatedTarget && box.contains(e.relatedTarget))) return;
+    setTimeout(() => { stale = false; render(); }, 300);
+  });
   dt.onchange = () => { if (dt.value) go(); };
   box.onclick = e => {
+    const bs = e.target.closest('button[data-bs]');
+    if (bs) { saveB(bs.dataset.bs, bs); return; }
     const c = e.target.closest('button[data-cp]');
     if (c) {
       const r = rows.find(r => r.id === c.dataset.r);
@@ -349,7 +397,7 @@ function viewSend() {
     '<div class="rows">' + [['v-id', 'Số CCCD (bắt buộc)', 'numeric', 'Quét hoặc nhập số CCCD'], ['v-name', 'Họ và tên', 'text', 'Không bắt buộc'], ['v-dob', 'Ngày tháng năm sinh', 'numeric', 'dd/mm/yyyy — không bắt buộc']].map(a =>
       '<div class="row"><div class="txt"><div class="lab">' + a[1] + '</div><input class="in" id="' + a[0] + '" inputmode="' + a[2] + '" placeholder="' + a[3] + '" autocomplete="off"' + (a[0] === 'v-id' ? ' maxlength="12"' : '') + '></div></div>').join('') + '</div>' +
     '<div class="need" id="need"></div>' +
-    '<div class="acts"><button class="act" id="send" disabled><span>Gửi</span><span>➤</span></button><button class="act ghost" id="redo"><span>Quét lại</span><span>↻</span></button></div>' +
+    '<div class="acts"><div class="sendrow"><label class="chk"><input type="checkbox" id="bq"><span>Yêu cầu tra mã BHYT</span></label><button class="act" id="send" disabled><span>Gửi</span><span>➤</span></button></div><button class="act ghost" id="redo"><span>Quét lại</span><span>↻</span></button></div>' +
     '<h3>Bảng trạng thái</h3>' + bar();
   const val = id => $('#' + id).value.trim();
   const upd = () => {
@@ -369,12 +417,12 @@ function viewSend() {
   $('#redo').onclick = () => { clearF(); scan.reset(); upd(); };
   $('#send').onclick = () => {
     upd(); if ($('#send').disabled) return;
-    const rec = { cccd: val('v-id'), name: val('v-name'), dob: val('v-dob') };
+    const rec = Object.assign({ cccd: val('v-id'), name: val('v-name'), dob: val('v-dob') }, $('#bq').checked ? { bhytReq: true } : {});
     const h = handler; ls.set('cl_h:' + me, JSON.stringify({ n: h, d: today() })); const t0 = setTimeout(() => toast('Chưa gửi được lên máy chủ — kiểm tra mạng/cấu hình Firebase', 5000), 5000);
     DB.add(today(), Object.assign(rec, { sender: me, handler: h, status: 'chua_kiem_tra', ts: Date.now() }))
       .then(() => { clearTimeout(t0); toast(DB.mode === 'local' ? 'Đã lưu trên máy này (chế độ thử — máy khác chưa thấy)' : 'Đã gửi cho ' + h + ' ✓', 3000); })
       .catch(e => { clearTimeout(t0); toast('Gửi lỗi: ' + (e.code || e.message), 4000); });
-    toast('Đang gửi…'); clearF(); scan.reset(); upd();
+    toast('Đang gửi…'); $('#bq').checked = false; clearF(); scan.reset(); upd();
   };
   wire(r => r.sender === me, 'send');
 }
@@ -437,7 +485,7 @@ function popups(list) {
   list.forEach(x => {
     const c = POPC[x.st] || POPC.chua_kiem_tra, d = document.createElement('div');
     d.className = 'pop'; d.style.background = c[0]; d.style.color = c[1];
-    d.innerHTML = '<div class="pn">' + esc(x.name || 'Không có tên') + '</div><div>CCCD: ' + esc(x.cccd) + '</div><div>Trạng thái: <b>' + esc(ST[x.st] || '') + '</b></div>';
+    d.innerHTML = '<div class="pn">' + esc(x.name || 'Không có tên') + '</div><div>CCCD: ' + esc(x.cccd) + '</div><div>Trạng thái: <b>' + esc(ST[x.st] || '') + '</b></div>' + (x.bhyt ? '<div>Mã BHYT là: <b class="bcode">' + esc(String(x.bhyt).toUpperCase()) + '</b></div>' : '');
     d.onclick = () => d.remove(); $('#pops').appendChild(d); setTimeout(() => d.remove(), 7000);
   });
 }
@@ -465,13 +513,14 @@ function startAlerts() {
     known = new Set(Object.keys(m));
     pend = mine.filter(id => m[id].status === 'chua_kiem_tra').length;
     setTitle(pend);
-    if (fresh.length) notify(fresh.map(id => m[id].sender));
+    if (fresh.length) notify(fresh.map(id => m[id].sender + (m[id].bhytReq ? ' (có tra BHYT)' : '')));
     // người gửi: báo khi người xử lí đổi trạng thái dòng mình đã gửi (so với lần trước, kể cả lúc trang đóng)
     const cur = {}, chg = [];
     Object.keys(m).forEach(id => {
       const r = m[id]; if (r.sender !== me) return;
-      const st = r.cancelled ? 'da_huy' : r.status; cur[id] = st;
-      if (prevSt && prevSt[id] && prevSt[id] !== st && st !== 'da_huy') chg.push({ name: r.name, cccd: r.cccd, st });
+      const st = r.cancelled ? 'da_huy' : r.status, bc = r.bhytCode || ''; cur[id] = { s: st, b: bc };
+      const p = prevSt && prevSt[id], ps = p && (typeof p === 'string' ? p : p.s), pb = p && typeof p === 'object' ? (p.b || '') : '';
+      if (p && st !== 'da_huy' && (ps !== st || (bc && bc !== pb))) chg.push({ name: r.name, cccd: r.cccd, st, bhyt: bc });
     });
     if (chg.length) popups(chg);
     prevSt = cur; ls.set(key, JSON.stringify(cur));
